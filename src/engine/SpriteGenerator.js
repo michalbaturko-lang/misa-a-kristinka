@@ -973,9 +973,10 @@ export class SpriteGenerator {
     return canvas;
   }
 
-  // ============ NPC (Rozumělka) ============
+  // ============ NPC (Rozumělka + Květunka) ============
   generateNPC() {
     this.npcSprites.rozumelka = this.drawRozumelkaSheet();
+    this.npcSprites.kvetunka = this.drawKvetunkaSheet();
   }
 
   drawRozumelkaSheet() {
@@ -997,8 +998,8 @@ export class SpriteGenerator {
     const glasses = '#ffd700';
     const bob = frame === 1 ? 1 : 0;
 
-    // Hair/head covering
-    fillRect(ctx, 4, 2 + bob, 8, 3, '#888');
+    // Purple hair (holčička s fialovými vlasy)
+    fillRect(ctx, 4, 2 + bob, 8, 3, '#9858d8');
     // Face
     fillRect(ctx, 4, 4 + bob, 8, 7, skin);
     // Glasses
@@ -1026,6 +1027,95 @@ export class SpriteGenerator {
     // Shoes
     fillRect(ctx, 5, 21 + bob, 3, 3, '#3a2a1a');
     fillRect(ctx, 8, 21 + bob, 3, 3, '#3a2a1a');
+  }
+
+  drawKvetunkaSheet() {
+    // Květunka - víla s křídly, zelené šaty, 2-frame idle
+    const { canvas, ctx } = createCanvas(CHAR_W * 2, CHAR_H);
+    for (let f = 0; f < 2; f++) {
+      ctx.save();
+      ctx.translate(f * CHAR_W, 0);
+      this.drawKvetunka(ctx, f);
+      ctx.restore();
+    }
+    return canvas;
+  }
+
+  drawKvetunka(ctx, frame) {
+    const skin = '#fcd8b4';
+    const dress = '#38a848';
+    const dressLight = '#58c868';
+    const dressDark = '#287838';
+    const hair = '#90d050';
+    const hairLight = '#b0e870';
+    const wing = 'rgba(180,240,255,0.6)';
+    const wingEdge = 'rgba(100,200,230,0.8)';
+    const flower = '#ff69b4';
+    const bob = frame === 1 ? 1 : 0;
+
+    // Wings (behind body)
+    // Left wing
+    fillRect(ctx, 1, 8 + bob, 3, 6, wing);
+    fillRect(ctx, 0, 9 + bob, 1, 4, wingEdge);
+    setPixel(ctx, 1, 7 + bob, wing);
+    // Right wing
+    fillRect(ctx, 12, 8 + bob, 3, 6, wing);
+    fillRect(ctx, 15, 9 + bob, 1, 4, wingEdge);
+    setPixel(ctx, 14, 7 + bob, wing);
+
+    // Hair - long green
+    fillRect(ctx, 3, 1 + bob, 10, 5, hair);
+    fillRect(ctx, 4, 0 + bob, 8, 2, hairLight);
+    // Side hair
+    fillRect(ctx, 3, 5 + bob, 2, 5, hair);
+    fillRect(ctx, 11, 5 + bob, 2, 5, hair);
+
+    // Flower on head
+    setPixel(ctx, 6, 0 + bob, flower);
+    setPixel(ctx, 5, 1 + bob, flower);
+    setPixel(ctx, 7, 1 + bob, flower);
+    setPixel(ctx, 6, 1 + bob, '#fff05a'); // center
+
+    // Face
+    fillRect(ctx, 4, 4 + bob, 8, 7, skin);
+
+    // Eyes - big sparkly
+    fillRect(ctx, 5, 6 + bob, 2, 2, '#fff');
+    fillRect(ctx, 9, 6 + bob, 2, 2, '#fff');
+    setPixel(ctx, 5, 7 + bob, '#2a8a2a');
+    setPixel(ctx, 10, 7 + bob, '#2a8a2a');
+    // Sparkle in eyes
+    setPixel(ctx, 5, 6 + bob, '#c0ffc0');
+    setPixel(ctx, 10, 6 + bob, '#c0ffc0');
+
+    // Cheeks
+    setPixel(ctx, 4, 9 + bob, '#f8b0a8');
+    setPixel(ctx, 11, 9 + bob, '#f8b0a8');
+
+    // Smile
+    fillRect(ctx, 6, 9 + bob, 4, 1, '#d06858');
+
+    // Dress
+    fillRect(ctx, 3, 11 + bob, 10, 5, dress);
+    fillRect(ctx, 4, 11 + bob, 8, 1, dressLight);
+    // Skirt (wider)
+    fillRect(ctx, 2, 16 + bob, 12, 3, dress);
+    fillRect(ctx, 3, 16 + bob, 10, 1, dressDark);
+    // Leaf pattern on skirt
+    setPixel(ctx, 5, 17 + bob, dressLight);
+    setPixel(ctx, 9, 17 + bob, dressLight);
+
+    // Arms
+    fillRect(ctx, 1, 12, 2, 3, skin);
+    fillRect(ctx, 13, 12, 2, 3, skin);
+
+    // Legs
+    fillRect(ctx, 5 + bob, 19, 2, 3, skin);
+    fillRect(ctx, 9 - bob, 19, 2, 3, skin);
+
+    // Shoes (leaf shoes)
+    fillRect(ctx, 4 + bob, 22, 3, 2, dressDark);
+    fillRect(ctx, 8 - bob, 22, 3, 2, dressDark);
   }
 
   // ============ UI SPRITES ============

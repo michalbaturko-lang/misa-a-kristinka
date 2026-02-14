@@ -12,7 +12,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
   text-align: center; padding: 30px;
   background: rgba(20, 10, 50, 0.85); border-radius: 24px;
   border: 2px solid rgba(200, 160, 255, 0.3);
-  max-width: 500px; width: 90%;
+  max-width: 520px; width: 90%;
 }
 .game-title { font-size: 2.4em; color: #ffd700; text-shadow: 0 2px 8px rgba(255,215,0,0.4); margin-bottom: 4px; }
 .game-subtitle { font-size: 1.1em; color: #c8a8ff; margin-bottom: 24px; font-weight: 400; }
@@ -42,15 +42,23 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 .btn-primary { background: linear-gradient(135deg, #6a40c8, #8a58e8); color: #fff; box-shadow: 0 4px 12px rgba(100,50,200,0.4); }
 .btn-primary:hover { transform: translateY(-2px); }
 .btn-primary:active { transform: translateY(0); }
+.btn-big { padding: 16px 48px; font-size: 1.3em; border-radius: 16px; }
 .btn-secondary { background: rgba(255,255,255,0.12); color: #e8d0ff; border: 1px solid rgba(200,160,255,0.3); }
 .btn-secondary:hover { background: rgba(255,255,255,0.2); }
 .join-row { display: flex; gap: 8px; }
 .input-code {
   padding: 10px 16px; border-radius: 10px; border: 1px solid rgba(200,160,255,0.3);
   background: rgba(255,255,255,0.08); color: #fff; font-size: 1.1em;
-  text-align: center; text-transform: uppercase; width: 140px; letter-spacing: 3px;
+  text-align: center; text-transform: uppercase; width: 120px; letter-spacing: 3px;
 }
 .input-code::placeholder { color: rgba(255,255,255,0.3); }
+
+.multiplayer-section {
+  margin-top: 8px; padding-top: 12px;
+  border-top: 1px solid rgba(200,160,255,0.15);
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+}
+.multiplayer-label { color: rgba(255,255,255,0.4); font-size: 0.85em; }
 
 /* LOBBY */
 #lobby-screen {
@@ -190,9 +198,11 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font
 
 @media (max-width: 600px) {
   .game-title { font-size: 1.6em; }
+  .game-subtitle { font-size: 0.9em; }
   .char-card { padding: 10px 14px; }
   .char-card canvas { width: 72px; height: 72px; }
   .btn { padding: 10px 24px; font-size: 0.9em; }
+  .btn-big { padding: 14px 36px; font-size: 1.1em; }
   #dpad { bottom: 16px; left: 16px; width: 130px; height: 130px; }
   .dpad-btn { width: 40px; height: 40px; font-size: 16px; }
   #action-buttons { bottom: 24px; right: 16px; }

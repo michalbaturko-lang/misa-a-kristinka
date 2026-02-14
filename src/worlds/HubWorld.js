@@ -3,6 +3,7 @@ import { TILES, DECOR } from '../utils/constants.js';
 /**
  * Hub World - "Louka Harmonie"
  * Green meadow with tree in center, 3 portal gates, Rozumělka NPC.
+ * Rozumělka stojí u fontány/stromu, má "!" nad hlavou.
  * Size: 40x30 tiles
  */
 export function buildHubWorld() {
@@ -118,6 +119,9 @@ export function buildHubWorld() {
 
     // Sign near spawn
     { type: DECOR.SIGN, x: 22, y: 18 },
+
+    // Well near tree (fontána)
+    { type: DECOR.WELL, x: 17, y: 16 },
   ];
 
   // Portals
@@ -127,7 +131,7 @@ export function buildHubWorld() {
     { x: 20, y: 3, targetWorld: 'space', label: 'Vesmír' },
   ];
 
-  // NPCs
+  // NPCs - Rozumělka stojí u stromu/fontány
   const npcs = [
     {
       npcType: 'rozumelka',
@@ -135,25 +139,15 @@ export function buildHubWorld() {
       y: 17,
       canInteract: true,
       dialogs: [
-        'Ahoj Míšo a Kristinko! Jsem Rozumělka.',
-        'Prchavec Zmatek zamíchal všechny světy!',
+        'Ahoj! Já jsem Rozumělka, vaše průvodkyně!',
+        'Země Pixelů potřebuje vaši pomoc...',
         'Potřebuji vaši pomoc - Míšo, tvoje čísla, a Kristinko, tvoje barvy dokážou všechno napravit!',
-        'Vidíte ten strom uprostřed? Potřebuje Léčivé semínko!',
-        'Spolupracujte - Míša spočítá a Kristinka namíchá barvu.',
       ],
     },
   ];
 
-  // Puzzles
-  const puzzles = [
-    {
-      id: 'hub_seed',
-      x: 20,
-      y: 12,
-      name: 'Léčivé semínko',
-      type: 'seed',
-    },
-  ];
+  // Puzzles - hub seed puzzle is now in forest (triggered by Květunka)
+  const puzzles = [];
 
   return {
     name: 'Louka Harmonie',

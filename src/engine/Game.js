@@ -4,24 +4,34 @@ import { Controls } from './Controls.js';
 import { Player, RemotePlayer } from './Player.js';
 import { ParticleSystem } from './Particles.js';
 import { DialogSystem } from './DialogSystem.js';
+import { CutsceneManager, INTRO_STEPS } from './CutsceneManager.js';
+import { QuestManager } from './QuestManager.js';
+import { QuestTracker } from '../ui/QuestTracker.js';
 import { WorldManager } from '../worlds/WorldManager.js';
 import { PuzzleManager } from '../puzzles/PuzzleManager.js';
 import { Network } from '../network/Network.js';
-import { TILE_SIZE, ROLES, DIRECTIONS } from '../utils/constants.js';
+import { TILE_SIZE, ROLES, DIRECTIONS, QUEST_STATES } from '../utils/constants.js';
 import { audio, createCanvas } from '../utils/helpers.js';
 
+const Q = QUEST_STATES;
+
 /**
- * Game - main controller. Start screen, game loop, multiplayer.
+ * Game - main controller.
+ * States: start | cutscene | lobby | playing
+ * Integrates: CutsceneManager, QuestManager, QuestTracker, DialogSystem, PuzzleManager
  */
 export class Game {
   constructor() {
-    this.state = 'start'; // start | lobby | playing
+    this.state = 'start'; // start | cutscene | lobby | playing
     this.canvas = document.getElementById('game-canvas');
     this.sprites = new SpriteGenerator();
     this.renderer = new Renderer(this.canvas, this.sprites);
     this.controls = new Controls();
     this.particles = new ParticleSystem();
     this.dialog = new DialogSystem();
+    this.cutscene = new CutsceneManager();
+    this.quest = new QuestManager();
+    this.questTracker = new QuestTracker();
     this.worldManager = new WorldManager();
     this.network = new Network();
     this.puzzleManager = new PuzzleManager(this.network);
@@ -33,6 +43,8 @@ export class Game {
     this.stars = 0;
     this.lastTime = 0;
     this.portalSparkleTimer = 0;
+    this.singlePlayer = false;
+    this.gameStarted = false;
 
     // Start screen animation
     this.startAnimTime = 0;
@@ -47,6 +59,9 @@ export class Game {
       });
     }
 
+    // Idle hint dialog
+    this.idleHintActive = false;
+
     this.setupUI();
     this.setupNetwork();
     this.loop = this.loop.bind(this);
@@ -57,13 +72,29 @@ export class Game {
     // Start screen buttons
     document.getElementById('btn-create')?.addEventListener('click', () => this.createRoom());
     document.getElementById('btn-join')?.addEventListener('click', () => this.joinRoom());
+    document.getElementById('btn-single')?.addEventListener('click', () => this.startSinglePlayer());
 
     // Character selection
     document.getElementById('card-misa')?.addEventListener('click', () => this.selectRole(ROLES.MATHEMATICIAN));
     document.getElementById('card-kristinka')?.addEventListener('click', () => this.selectRole(ROLES.ARTIST));
 
+    // Cutscene click/tap handler
+    this.canvas.addEventListener('click', () => this.handleCanvasClick());
+    this.canvas.addEventListener('touchstart', (e) => {
+      if (this.state === 'cutscene') {
+        e.preventDefault();
+        this.handleCanvasClick();
+      }
+    });
+
     // Draw portraits on start screen
     this.drawStartPortraits();
+  }
+
+  handleCanvasClick() {
+    if (this.state === 'cutscene' && this.cutscene.isActive()) {
+      this.cutscene.handleInput();
+    }
   }
 
   drawStartPortraits() {
@@ -89,6 +120,18 @@ export class Game {
     audio.playEffect('ui_click');
   }
 
+  // ============ SINGLE PLAYER ============
+  startSinglePlayer() {
+    if (!this.role) {
+      this.showMessage('Vyber si postavu!');
+      return;
+    }
+    this.singlePlayer = true;
+    this.puzzleManager.setSinglePlayer(true);
+    this.beginGame();
+  }
+
+  // ============ MULTIPLAYER ============
   async createRoom() {
     if (!this.role) {
       this.showMessage('Vyber si postavu!');
@@ -130,7 +173,6 @@ export class Game {
     });
 
     this.network.on('room:state', ({ players }) => {
-      // Update lobby
       const lobbyPlayers = document.getElementById('lobby-players');
       if (lobbyPlayers) {
         lobbyPlayers.innerHTML = players.map(p =>
@@ -144,14 +186,13 @@ export class Game {
     });
 
     this.network.on('game:start', ({ players, world }) => {
-      this.startGame(players, world);
+      this.setupMultiplayerPlayers(players);
+      this.beginGame();
     });
 
     this.network.on('player:move', ({ id, position, rotation }) => {
       const rp = this.remotePlayers.get(id);
-      if (rp) {
-        rp.setTarget(position.x, position.y, rotation.y);
-      }
+      if (rp) rp.setTarget(position.x, position.y, rotation.y);
     });
 
     this.network.on('player:leave', ({ id }) => {
@@ -169,8 +210,7 @@ export class Game {
     this.network.on('puzzle:complete', ({ puzzleId, stars }) => {
       this.stars = stars;
       this.puzzleManager.onPuzzleComplete(puzzleId);
-      this.particles.celebrate(this.player.x, this.player.y - 20);
-      this.renderer.shake(4);
+      this.onPuzzleCompleted(puzzleId);
     });
 
     this.network.on('celebration', ({ title, text }) => {
@@ -178,6 +218,85 @@ export class Game {
     });
   }
 
+  setupMultiplayerPlayers(players) {
+    const myId = this.network.getSocketId();
+    for (const p of players) {
+      if (p.id !== myId) {
+        const rp = new RemotePlayer(p.id, p.role, p.name, this.sprites);
+        this.remotePlayers.set(p.id, rp);
+      }
+    }
+  }
+
+  // ============ GAME START FLOW ============
+  beginGame() {
+    document.getElementById('lobby-screen').style.display = 'none';
+    document.getElementById('start-screen').style.display = 'none';
+
+    this.player = new Player(this.role, this.sprites);
+    this.puzzleManager.setRole(this.role);
+
+    // Check if quest is past intro (continue from saved state)
+    if (this.quest.getState() !== Q.INTRO) {
+      // Resume game - skip cutscene
+      this.state = 'playing';
+      document.getElementById('game-ui').style.display = 'block';
+      this.startPlaying();
+    } else {
+      // Start cutscene
+      this.state = 'cutscene';
+      this.cutscene.start(INTRO_STEPS, () => {
+        this.quest.setState(Q.HUB_FIND_ROZUMELKA);
+        this.state = 'playing';
+        document.getElementById('game-ui').style.display = 'block';
+        this.startPlaying();
+      });
+    }
+  }
+
+  startPlaying() {
+    this.gameStarted = true;
+    const questState = this.quest.getState();
+
+    // Determine which world to load based on quest state
+    let worldName = 'hub';
+    if (questState.startsWith('forest_')) {
+      worldName = 'forest';
+    }
+
+    this.loadWorld(worldName);
+    this.updateQuestTracker();
+  }
+
+  loadWorld(worldName) {
+    this.worldManager.loadWorld(worldName);
+    const wd = this.worldManager.getWorld();
+    this.player.setPosition(wd.spawnX, wd.spawnY);
+    this.renderer.snapCamera(this.player.x, this.player.y);
+    this.particles.clear();
+
+    // Quest: world change event
+    this.quest.onWorldChange(worldName);
+    this.updateQuestTracker();
+
+    // Notify network
+    if (this.network.connected) {
+      this.network.sendWorldChange(worldName);
+    }
+  }
+
+  updateQuestTracker() {
+    const desc = this.quest.getDescription();
+    const target = this.quest.getTargetPosition();
+    this.questTracker.setQuest(
+      desc,
+      target ? target.x : 0,
+      target ? target.y : 0,
+      target ? target.world : null,
+    );
+  }
+
+  // ============ UI HELPERS ============
   showLobby(code) {
     document.getElementById('start-screen').style.display = 'none';
     document.getElementById('lobby-screen').style.display = 'flex';
@@ -200,66 +319,44 @@ export class Game {
     setTimeout(() => { el.style.display = 'none'; }, 4000);
   }
 
-  startGame(players, world) {
-    document.getElementById('lobby-screen').style.display = 'none';
-    document.getElementById('start-screen').style.display = 'none';
-    document.getElementById('game-ui').style.display = 'block';
-
-    this.state = 'playing';
-    this.player = new Player(this.role, this.sprites);
-    this.puzzleManager.setRole(this.role);
-
-    // Setup remote players
-    const myId = this.network.getSocketId();
-    for (const p of players) {
-      if (p.id !== myId) {
-        const rp = new RemotePlayer(p.id, p.role, p.name, this.sprites);
-        this.remotePlayers.set(p.id, rp);
-      }
-    }
-
-    this.loadWorld(world || 'hub');
-
-    // Intro dialog
-    setTimeout(() => {
-      if (this.worldManager.currentWorld === 'hub') {
-        const npc = this.worldManager.npcs[0];
-        if (npc) {
-          this.dialog.startDialog(
-            npc.dialogs,
-            npc.x * TILE_SIZE + TILE_SIZE / 2,
-            npc.y * TILE_SIZE - 8,
-          );
-        }
-      }
-    }, 1000);
-  }
-
-  loadWorld(worldName) {
-    this.worldManager.loadWorld(worldName);
-    const wd = this.worldManager.getWorld();
-    this.player.setPosition(wd.spawnX, wd.spawnY);
-    this.renderer.snapCamera(this.player.x, this.player.y);
-    this.particles.clear();
-
-    // Notify network
-    if (this.network.connected) {
-      this.network.sendWorldChange(worldName);
-    }
-  }
-
+  // ============ MAIN LOOP ============
   loop(timestamp) {
     const dt = Math.min((timestamp - this.lastTime) / 1000, 0.05);
     this.lastTime = timestamp;
 
     if (this.state === 'start') {
       this.drawStartScreen(dt);
+    } else if (this.state === 'cutscene') {
+      this.updateCutscene(dt);
+      this.drawCutscene();
     } else if (this.state === 'playing') {
       this.updateGame(dt);
       this.drawGame();
     }
 
     requestAnimationFrame(this.loop);
+  }
+
+  // ============ CUTSCENE ============
+  updateCutscene(dt) {
+    this.startAnimTime += dt;
+    this.cutscene.update(dt);
+
+    // Also handle keyboard/touch for cutscene advance
+    this.controls.update();
+    if (this.controls.interactJustPressed || this.controls.jumpJustPressed) {
+      this.cutscene.handleInput();
+    }
+  }
+
+  drawCutscene() {
+    // Clear canvas
+    const ctx = this.renderer.ctx;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Draw cutscene on main canvas
+    this.cutscene.draw(ctx, this.canvas.width, this.canvas.height);
   }
 
   // ============ START SCREEN ============
@@ -293,13 +390,13 @@ export class Game {
     c.fillText(title, r.logicalW / 2 - c.measureText(title).width / 2, 40);
 
     c.fillStyle = '#e8d0ff';
-    c.font = '7px monospace';
-    const sub = 'Dobrodruzi';
-    c.fillText(sub, r.logicalW / 2 - c.measureText(sub).width / 2, 55);
+    c.font = '6px monospace';
+    const sub = 'Dobrodruzi v Zemi Pixelů';
+    c.fillText(sub, r.logicalW / 2 - c.measureText(sub).width / 2, 52);
 
     // Floating characters
-    const misaY = 75 + Math.sin(this.startAnimTime * 1.5) * 3;
-    const kristY = 75 + Math.sin(this.startAnimTime * 1.5 + 1) * 3;
+    const misaY = 70 + Math.sin(this.startAnimTime * 1.5) * 3;
+    const kristY = 70 + Math.sin(this.startAnimTime * 1.5 + 1) * 3;
     const misaSheet = this.sprites.getCharacter(ROLES.MATHEMATICIAN);
     const kristSheet = this.sprites.getCharacter(ROLES.ARTIST);
     c.drawImage(misaSheet, 0, 0, 16, 24, 90, misaY, 16, 24);
@@ -309,9 +406,10 @@ export class Game {
     r.endFrame();
   }
 
-  // ============ GAME LOOP ============
+  // ============ GAME UPDATE ============
   updateGame(dt) {
     this.controls.update();
+    this.questTracker.update(dt);
 
     // Dialog handling
     if (this.dialog.isActive()) {
@@ -366,14 +464,39 @@ export class Game {
       this.network.sendPosition(state.position, state.rotation);
     }
 
+    // Idle hint system (15 seconds without moving)
+    const hint = this.quest.updateIdle(dt, this.player.moving);
+    if (hint && !this.dialog.isActive()) {
+      // Show Rozumělka hint as dialog
+      this.showIdleHint(hint);
+    }
+
     // Interaction check
     this.checkInteractions();
+  }
+
+  showIdleHint(hintText) {
+    // Find Rozumělka in current world for position
+    const rozumelka = this.worldManager.npcs.find(n => n.npcType === 'rozumelka');
+    if (rozumelka) {
+      this.dialog.startDialog(
+        [`💡 ${hintText}`],
+        rozumelka.x * TILE_SIZE + TILE_SIZE / 2,
+        rozumelka.y * TILE_SIZE - 8,
+      );
+    } else {
+      // Show at player position
+      this.dialog.startDialog(
+        [`💡 ${hintText}`],
+        this.player.x,
+        this.player.y - 20,
+      );
+    }
   }
 
   checkInteractions() {
     if (!this.controls.interactJustPressed) return;
 
-    const facingTile = this.player.getFacingTile();
     const playerTile = this.player.getTilePos();
 
     // Check NPCs
@@ -381,12 +504,7 @@ export class Game {
       const dx = Math.abs(playerTile.x - npc.x);
       const dy = Math.abs(playerTile.y - npc.y);
       if (dx <= 2 && dy <= 2) {
-        this.dialog.startDialog(
-          npc.dialogs,
-          npc.x * TILE_SIZE + TILE_SIZE / 2,
-          npc.y * TILE_SIZE - 8,
-        );
-        audio.playEffect('interact');
+        this.interactWithNPC(npc);
         return;
       }
     }
@@ -402,16 +520,65 @@ export class Game {
       }
     }
 
-    // Check puzzles
+    // Check puzzles (only when quest allows)
     const puzzle = this.puzzleManager.getNearbyPuzzle(
       this.player.x, this.player.y, this.worldManager.puzzles
     );
-    if (puzzle) {
+    if (puzzle && this.quest.shouldStartPuzzle(puzzle.id)) {
       this.puzzleManager.startPuzzle(puzzle, (completed) => {
-        this.particles.celebrate(this.player.x, this.player.y - 20);
-        this.renderer.shake(5);
+        this.onPuzzleCompleted(puzzle.id);
       });
       return;
+    }
+  }
+
+  interactWithNPC(npc) {
+    audio.playEffect('interact');
+
+    // Get quest-specific dialog, or fall back to default
+    const questDialog = this.quest.getNPCDialog(npc.npcType);
+    const dialogTexts = questDialog || npc.dialogs;
+
+    this.dialog.startDialog(
+      dialogTexts,
+      npc.x * TILE_SIZE + TILE_SIZE / 2,
+      npc.y * TILE_SIZE - 8,
+      () => {
+        // Dialog completed - check quest advancement
+        const result = this.quest.onDialogComplete(npc.npcType);
+        if (result === 'start_puzzle_seed') {
+          // Automatically start the seed puzzle after Květunka's dialog
+          const puzzle = this.worldManager.puzzles.find(p => p.id === 'forest_seed');
+          if (puzzle) {
+            setTimeout(() => {
+              this.puzzleManager.startPuzzle(puzzle, () => {
+                this.onPuzzleCompleted(puzzle.id);
+              });
+            }, 500);
+          }
+        } else if (result === 'game_complete') {
+          this.showCelebration('🎉 VÝBORNĚ!', 'Magický les je zachráněn!');
+          this.particles.celebrate(this.player.x, this.player.y - 20);
+          this.renderer.shake(5);
+          this.questTracker.celebrate();
+        }
+        this.updateQuestTracker();
+      }
+    );
+  }
+
+  onPuzzleCompleted(puzzleId) {
+    this.quest.onPuzzleComplete(puzzleId);
+    this.updateQuestTracker();
+    this.stars++;
+    this.particles.celebrate(this.player.x, this.player.y - 20);
+    this.renderer.shake(5);
+    audio.playEffect('celebration');
+
+    if (puzzleId === 'forest_seed') {
+      this.showCelebration('🌱 Semínko nalezeno!', 'Květina oživuje!');
+    } else if (puzzleId === 'forest_bridge') {
+      this.showCelebration('🌉 Most opraven!', 'Cesta je volná!');
     }
   }
 
@@ -431,12 +598,12 @@ export class Game {
       drawables.push({ type: 'decor', y: d.y, data: d });
     }
 
-    // Portals
+    // Portals (with quest-aware blinking)
     for (const p of world.portals) {
       drawables.push({ type: 'portal', y: p.y, data: p });
     }
 
-    // NPCs
+    // NPCs (with quest-aware glow)
     for (const n of world.npcs) {
       drawables.push({ type: 'npc', y: n.y + 1, data: n });
     }
@@ -467,10 +634,10 @@ export class Game {
           r.drawDecoration(d.data);
           break;
         case 'portal':
-          r.drawPortal(d.data);
+          r.drawPortal(d.data, this.quest.shouldPortalBlink(d.data.targetWorld));
           break;
         case 'npc':
-          r.drawNPC(d.data);
+          r.drawNPC(d.data, this.quest.shouldNPCGlow(d.data.npcType));
           break;
         case 'player':
           r.drawCharacter(d.data.sheet, d.data.x, d.data.y, d.data.dir, d.data.animFrame);
@@ -486,6 +653,13 @@ export class Game {
     // Particles
     r.drawParticles(this.particles.getParticles());
 
+    // Quest navigation arrow (in buffer space)
+    this.questTracker.drawArrow(
+      r.bufCtx, r,
+      this.player.x, this.player.y,
+      this.worldManager.currentWorld,
+    );
+
     // Interaction prompts
     this.drawInteractionPrompts();
 
@@ -497,6 +671,9 @@ export class Game {
 
     // HUD (drawn on main canvas, after buffer scale)
     r.drawHUD(this.stars, this.role, this.roomCode, world.name);
+
+    // Quest tracker HUD (on main canvas)
+    this.questTracker.drawHUD(r.ctx, this.canvas.width, this.canvas.height);
   }
 
   drawInteractionPrompts() {
@@ -529,11 +706,11 @@ export class Game {
       }
     }
 
-    // Puzzle prompts
+    // Puzzle prompts (only when quest allows)
     const puzzle = this.puzzleManager.getNearbyPuzzle(
       this.player.x, this.player.y, this.worldManager.puzzles
     );
-    if (puzzle) {
+    if (puzzle && this.quest.shouldStartPuzzle(puzzle.id)) {
       r.drawInteractionPrompt(
         puzzle.x * TILE_SIZE + TILE_SIZE / 2,
         puzzle.y * TILE_SIZE,

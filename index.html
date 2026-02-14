@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Míša & Kristinka - Dobrodruzi</title>
+  <title>Míša & Kristinka - Dobrodruzi v Zemi Pixelů</title>
   <link rel="stylesheet" href="/styles/game.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
   <div id="start-screen">
     <div class="start-content">
       <h1 class="game-title">Míša & Kristinka</h1>
-      <h2 class="game-subtitle">Dobrodruzi</h2>
+      <h2 class="game-subtitle">Dobrodruzi v Zemi Pixelů</h2>
 
       <div class="char-select">
         <div class="char-card" id="card-misa">
@@ -30,10 +30,14 @@
       </div>
 
       <div class="room-actions">
-        <button id="btn-create" class="btn btn-primary">Vytvořit místnost</button>
-        <div class="join-row">
-          <input id="room-code-input" type="text" placeholder="Kód místnosti" maxlength="5" class="input-code">
-          <button id="btn-join" class="btn btn-secondary">Připojit se</button>
+        <button id="btn-single" class="btn btn-primary btn-big">Hrát sám</button>
+        <div class="multiplayer-section">
+          <p class="multiplayer-label">Hrát spolu:</p>
+          <button id="btn-create" class="btn btn-secondary">Vytvořit místnost</button>
+          <div class="join-row">
+            <input id="room-code-input" type="text" placeholder="Kód" maxlength="5" class="input-code">
+            <button id="btn-join" class="btn btn-secondary">Připojit se</button>
+          </div>
         </div>
       </div>
     </div>

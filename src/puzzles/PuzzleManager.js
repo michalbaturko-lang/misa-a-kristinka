@@ -15,10 +15,16 @@ export class PuzzleManager {
     this.partnerProgress = false;
     this.completedPuzzles = new Set();
     this.onComplete = null;
+    this.singlePlayer = false;
+    this.singlePlayerPhase = 0; // 0=first role, 1=second role
   }
 
   setRole(role) {
     this.role = role;
+  }
+
+  setSinglePlayer(val) {
+    this.singlePlayer = !!val;
   }
 
   isPuzzleActive() {
@@ -33,7 +39,9 @@ export class PuzzleManager {
     this.partnerProgress = false;
     audio.playEffect('puzzle_start');
 
-    this.network.sendPuzzleStart(puzzleDef.id);
+    if (!this.singlePlayer) {
+      this.network.sendPuzzleStart(puzzleDef.id);
+    }
     this.showPuzzleUI(puzzleDef);
   }
 
@@ -111,7 +119,7 @@ export class PuzzleManager {
         const val = parseInt(input.value);
         if (val === answer) {
           this.myProgress = true;
-          this.network.sendPuzzleProgress(this.activePuzzle.id, true, this.role);
+          if (!this.singlePlayer) this.network.sendPuzzleProgress(this.activePuzzle.id, true, this.role);
           this.updateStatus();
           btn.textContent = 'Správně! ★';
           btn.disabled = true;
@@ -161,7 +169,7 @@ export class PuzzleManager {
             resultCircle.style.background = target;
             resultCircle.textContent = '✓';
             this.myProgress = true;
-            this.network.sendPuzzleProgress(this.activePuzzle.id, true, this.role);
+            if (!this.singlePlayer) this.network.sendPuzzleProgress(this.activePuzzle.id, true, this.role);
             this.updateStatus();
             audio.playEffect('puzzle_success');
             this.checkBothDone();
@@ -220,7 +228,7 @@ export class PuzzleManager {
           sumDisplay.textContent = `Součet: ${sum} / ${target}`;
           if (sum === target) {
             this.myProgress = true;
-            this.network.sendPuzzleProgress(this.activePuzzle.id, true, this.role);
+            if (!this.singlePlayer) this.network.sendPuzzleProgress(this.activePuzzle.id, true, this.role);
             this.updateStatus();
             sumDisplay.textContent = 'Správně! Most se staví...';
             sumDisplay.classList.add('success');
@@ -275,7 +283,7 @@ export class PuzzleManager {
           const correct = filled.every((c, idx) => c === correctPattern[idx]);
           if (correct && filled.every(c => c !== '')) {
             this.myProgress = true;
-            this.network.sendPuzzleProgress(this.activePuzzle.id, true, this.role);
+            if (!this.singlePlayer) this.network.sendPuzzleProgress(this.activePuzzle.id, true, this.role);
             this.updateStatus();
             audio.playEffect('puzzle_success');
             this.checkBothDone();
@@ -306,15 +314,24 @@ export class PuzzleManager {
   }
 
   checkBothDone() {
-    if (this.myProgress && this.partnerProgress) {
-      this.completePuzzle();
+    if (this.singlePlayer) {
+      // In single player, completing one part is enough
+      if (this.myProgress) {
+        this.partnerProgress = true;
+        this.updateStatus();
+        this.completePuzzle();
+      }
+    } else {
+      if (this.myProgress && this.partnerProgress) {
+        this.completePuzzle();
+      }
     }
   }
 
   completePuzzle() {
     if (!this.activePuzzle) return;
     this.completedPuzzles.add(this.activePuzzle.id);
-    this.network.sendPuzzleComplete(this.activePuzzle.id);
+    if (!this.singlePlayer) this.network.sendPuzzleComplete(this.activePuzzle.id);
     audio.playEffect('celebration');
 
     // Show success

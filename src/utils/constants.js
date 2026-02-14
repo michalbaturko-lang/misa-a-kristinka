@@ -120,6 +120,20 @@ export const WORLDS = {
   SPACE: 'space',
 };
 
+// ===== QUEST STATES =====
+export const QUEST_STATES = {
+  INTRO: 'intro',
+  HUB_FIND_ROZUMELKA: 'hub_find_rozumelka',
+  HUB_GO_TO_FOREST: 'hub_go_to_forest',
+  FOREST_FIND_KVETUNKA: 'forest_find_kvetunka',
+  FOREST_PUZZLE_1: 'forest_puzzle_1',
+  FOREST_FIND_BRIDGE: 'forest_find_bridge',
+  FOREST_PUZZLE_2: 'forest_puzzle_2',
+  FOREST_COMPLETE: 'forest_complete',
+  HUB_RETURN: 'hub_return',
+  GAME_COMPLETE: 'game_complete',
+};
+
 // ===== AUDIO PLACEHOLDER EVENTS =====
 export const SOUNDS = {
   FOOTSTEP: 'footstep',

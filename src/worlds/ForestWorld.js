@@ -3,6 +3,7 @@ import { TILES, DECOR } from '../utils/constants.js';
 /**
  * Forest World - "Magický Les"
  * Dark green forest with river, bridge puzzle, animals, fairy lights.
+ * NPC Květunka (víla s křídly, zelené šaty) na mýtině na jihu.
  * Size: 50x40 tiles
  */
 export function buildForestWorld() {
@@ -40,12 +41,20 @@ export function buildForestWorld() {
   for (let x = 28; x < 48; x++) { tiles[20][x] = TILES.PATH; tiles[21][x] = TILES.PATH; }
   for (let y = 5; y < 35; y++) { tiles[y][10] = TILES.PATH; tiles[y][11] = TILES.PATH; }
 
-  // Dirt clearing
+  // Path to Květunka's clearing (south)
+  for (let y = 25; y < 32; y++) { tiles[y][14] = TILES.PATH; tiles[y][15] = TILES.PATH; }
+
+  // Květunka's clearing - dirt area
   for (let y = 28; y < 33; y++)
-    for (let x = 6; x < 14; x++) tiles[y][x] = TILES.DIRT;
+    for (let x = 12; x < 19; x++) tiles[y][x] = TILES.DIRT;
+
+  // Bridge puzzle clearing
+  for (let y = 28; y < 33; y++)
+    for (let x = 6; x < 12; x++) tiles[y][x] = TILES.DIRT;
 
   // Flower spots
-  const fl = [[36,9],[39,11],[41,9],[37,12],[42,10],[8,6],[14,34],[40,32]];
+  const fl = [[36,9],[39,11],[41,9],[37,12],[42,10],[8,6],[14,34],[40,32],
+    [13,28],[17,28],[14,32],[16,32]]; // Extra flowers near Květunka
   for (const [x, y] of fl) if (tiles[y] && tiles[y][x] === TILES.GRASS_DARK) tiles[y][x] = TILES.GRASS_FLOWER;
 
   const decorations = [
@@ -55,41 +64,76 @@ export function buildForestWorld() {
     { type: DECOR.TREE_DARK, x: 14, y: 5 }, { type: DECOR.TREE_PINE, x: 17, y: 3 },
     { type: DECOR.TREE_DARK, x: 15, y: 10 }, { type: DECOR.TREE_DARK, x: 18, y: 8 },
     { type: DECOR.TREE_DARK, x: 3, y: 24 }, { type: DECOR.TREE_PINE, x: 6, y: 35 },
-    { type: DECOR.TREE_DARK, x: 14, y: 30 }, { type: DECOR.TREE_DARK, x: 17, y: 25 },
+    { type: DECOR.TREE_DARK, x: 14, y: 35 }, { type: DECOR.TREE_DARK, x: 17, y: 25 },
     { type: DECOR.TREE_PINE, x: 19, y: 33 }, { type: DECOR.TREE_DARK, x: 32, y: 3 },
     { type: DECOR.TREE_PINE, x: 38, y: 5 }, { type: DECOR.TREE_DARK, x: 44, y: 4 },
     { type: DECOR.TREE_DARK, x: 34, y: 15 }, { type: DECOR.TREE_PINE, x: 40, y: 18 },
     { type: DECOR.TREE_DARK, x: 46, y: 12 }, { type: DECOR.TREE_DARK, x: 33, y: 28 },
     { type: DECOR.TREE_PINE, x: 42, y: 30 }, { type: DECOR.TREE_DARK, x: 45, y: 25 },
     { type: DECOR.TREE_DARK, x: 38, y: 35 },
+    // Mushrooms
     { type: DECOR.MUSHROOM_RED, x: 6, y: 14 }, { type: DECOR.MUSHROOM_BLUE, x: 16, y: 7 },
     { type: DECOR.MUSHROOM_RED, x: 36, y: 22 }, { type: DECOR.MUSHROOM_BLUE, x: 43, y: 28 },
+    // Fairy lights - around Květunka's clearing
     { type: DECOR.FAIRY_LIGHT, x: 9, y: 7 }, { type: DECOR.FAIRY_LIGHT, x: 13, y: 12 },
     { type: DECOR.FAIRY_LIGHT, x: 6, y: 18 }, { type: DECOR.FAIRY_LIGHT, x: 37, y: 10 },
     { type: DECOR.FAIRY_LIGHT, x: 41, y: 16 },
+    { type: DECOR.FAIRY_LIGHT, x: 12, y: 27 }, { type: DECOR.FAIRY_LIGHT, x: 18, y: 29 },
+    { type: DECOR.FAIRY_LIGHT, x: 13, y: 33 }, { type: DECOR.FAIRY_LIGHT, x: 17, y: 33 },
+    // Animals
     { type: DECOR.ANIMAL_BUNNY, x: 12, y: 15 }, { type: DECOR.ANIMAL_FOX, x: 40, y: 10 },
     { type: DECOR.ANIMAL_BUNNY, x: 35, y: 32 },
+    // Flowers near Květunka
+    { type: DECOR.FLOWER_PURPLE, x: 13, y: 29 }, { type: DECOR.FLOWER_BLUE, x: 17, y: 30 },
+    { type: DECOR.FLOWER_PURPLE, x: 14, y: 31 }, { type: DECOR.FLOWER_RED, x: 16, y: 29 },
+    // Other flowers
     { type: DECOR.FLOWER_PURPLE, x: 36, y: 9 }, { type: DECOR.FLOWER_BLUE, x: 39, y: 11 },
     { type: DECOR.FLOWER_PURPLE, x: 41, y: 9 },
+    // Rocks
     { type: DECOR.ROCK, x: 22, y: 10 }, { type: DECOR.ROCK, x: 29, y: 15 },
     { type: DECOR.ROCK_BIG, x: 22, y: 30 },
+    // Stumps and vines
     { type: DECOR.STUMP, x: 16, y: 18 }, { type: DECOR.STUMP, x: 8, y: 27 },
     { type: DECOR.VINE, x: 4, y: 9 }, { type: DECOR.VINE, x: 13, y: 6 }, { type: DECOR.VINE, x: 35, y: 7 },
+  ];
+
+  // NPCs - Květunka on clearing, Rozumělka near portal
+  const npcs = [
+    {
+      npcType: 'kvetunka',
+      x: 15,
+      y: 30,
+      canInteract: true,
+      dialogs: [
+        'Ahoj! Já jsem Květunka, víla květin.',
+        'Moje kouzelná květina uvadá...',
+        'Můžete mi pomoct?',
+      ],
+    },
+    {
+      npcType: 'rozumelka',
+      x: 5,
+      y: 20,
+      canInteract: true,
+      dialogs: [
+        'Vítejte v Magickém lese!',
+        'Najděte Květunku na jihu - potřebuje pomoc!',
+      ],
+    },
+  ];
+
+  // Puzzles
+  const puzzles = [
+    { id: 'forest_seed', x: 15, y: 30, name: 'Léčivé semínko', type: 'seed' },
+    { id: 'forest_bridge', x: 8, y: 29, name: 'Most přes řeku', type: 'bridge' },
   ];
 
   return {
     name: 'Magický Les',
     width: W, height: H, tiles, decorations,
     portals: [{ x: 2, y: 20, targetWorld: 'hub', label: 'Zpět' }],
-    npcs: [{
-      npcType: 'rozumelka', x: 8, y: 20, canInteract: true,
-      dialogs: [
-        'Vítejte v Magickém lese!',
-        'Řeka vám brání v cestě. Musíte postavit most!',
-        'Míšo, spočítej délku prken. Kristinko, namaluj na ně vzor!',
-      ],
-    }],
-    puzzles: [{ id: 'forest_bridge', x: 10, y: 29, name: 'Most přes řeku', type: 'bridge' }],
+    npcs,
+    puzzles,
     spawnX: 4, spawnY: 20, bgColor: '#1a4a2a', skyColor: '#4a7a5a',
   };
 }

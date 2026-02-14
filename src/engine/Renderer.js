@@ -116,30 +116,74 @@ export class Renderer {
     if (alpha != null && alpha < 1) c.globalAlpha = 1;
   }
 
-  drawNPC(npc) {
+  drawNPC(npc, questGlow) {
     const c = this.bufCtx;
     const sp = this.w2s(npc.x * TILE_SIZE + TILE_SIZE / 2, npc.y * TILE_SIZE + TILE_SIZE);
     const sheet = this.sprites.getNPC(npc.npcType);
     if (!sheet) return;
+
+    // Quest glow effect (pulsing golden circle under NPC)
+    if (questGlow) {
+      const pulse = Math.sin(this.time * 4) * 0.2 + 0.5;
+      c.globalAlpha = pulse;
+      c.fillStyle = '#ffd700';
+      c.beginPath();
+      c.arc(sp.x, sp.y - 2, 10 + Math.sin(this.time * 3) * 2, 0, Math.PI * 2);
+      c.fill();
+      c.globalAlpha = 1;
+    }
+
     c.drawImage(sheet, (Math.floor(this.time * 1.5) % 2) * CHAR_W, 0, CHAR_W, CHAR_H,
       sp.x - CHAR_W / 2, sp.y - CHAR_H + 6, CHAR_W, CHAR_H);
+
+    // "!" indicator above head (always when canInteract, bigger when questGlow)
     if (npc.canInteract) {
       const bob = Math.sin(this.time * 4) * 2;
-      c.fillStyle = '#ffd700';
-      c.fillRect(sp.x - 1, sp.y - CHAR_H - 4 + bob, 3, 4);
-      c.fillRect(sp.x, sp.y - CHAR_H + 1 + bob, 1, 1);
+      if (questGlow) {
+        // Big glowing "!" for quest target
+        const blink = Math.sin(this.time * 6) > -0.3;
+        if (blink) {
+          c.fillStyle = '#ffd700';
+          c.fillRect(sp.x - 1, sp.y - CHAR_H - 8 + bob, 3, 6);
+          c.fillRect(sp.x, sp.y - CHAR_H - 1 + bob, 1, 1);
+          // Extra glow
+          c.globalAlpha = 0.4;
+          c.fillStyle = '#ffe44d';
+          c.fillRect(sp.x - 2, sp.y - CHAR_H - 9 + bob, 5, 8);
+          c.globalAlpha = 1;
+        }
+      } else {
+        c.fillStyle = '#ffd700';
+        c.fillRect(sp.x - 1, sp.y - CHAR_H - 4 + bob, 3, 4);
+        c.fillRect(sp.x, sp.y - CHAR_H + 1 + bob, 1, 1);
+      }
     }
   }
 
-  drawPortal(portal) {
+  drawPortal(portal, shouldBlink) {
     const frames = this.sprites.getDecoration('portal');
     if (!frames || !Array.isArray(frames)) return;
+    const c = this.bufCtx;
     const sp = this.w2s(portal.x * TILE_SIZE, portal.y * TILE_SIZE);
-    this.bufCtx.drawImage(frames[this.portalFrame], sp.x - 8, sp.y - 16, 32, 32);
+
+    // Quest blink effect - portal pulses and glows when it's time to enter
+    if (shouldBlink) {
+      const pulse = Math.sin(this.time * 5) * 0.3 + 0.7;
+      c.globalAlpha = pulse;
+      c.fillStyle = '#ffd700';
+      c.beginPath();
+      c.arc(sp.x + 8, sp.y, 18 + Math.sin(this.time * 3) * 3, 0, Math.PI * 2);
+      c.fill();
+      c.globalAlpha = 1;
+    }
+
+    c.drawImage(frames[this.portalFrame], sp.x - 8, sp.y - 16, 32, 32);
+
     if (portal.label) {
-      this.bufCtx.fillStyle = '#fff'; this.bufCtx.font = '4px monospace';
-      const tw = this.bufCtx.measureText(portal.label).width;
-      this.bufCtx.fillText(portal.label, sp.x + TILE_SIZE / 2 - tw / 2 - 8, sp.y - 20);
+      c.fillStyle = shouldBlink ? '#ffd700' : '#fff';
+      c.font = shouldBlink ? 'bold 4px monospace' : '4px monospace';
+      const tw = c.measureText(portal.label).width;
+      c.fillText(portal.label, sp.x + TILE_SIZE / 2 - tw / 2 - 8, sp.y - 20);
     }
   }
 

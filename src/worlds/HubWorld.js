@@ -1,194 +1,172 @@
-import { BLOCKS } from '../utils/constants.js';
-import { createNoise, octaveNoise } from '../utils/helpers.js';
+import { TILES, DECOR } from '../utils/constants.js';
 
 /**
- * Hub World - The starting area with portals to other worlds
- * A cozy meadow with a central treehouse and three portals
+ * Hub World - "Louka Harmonie"
+ * Green meadow with tree in center, 3 portal gates, Rozumělka NPC.
+ * Size: 40x30 tiles
  */
-export function buildHubWorld(world) {
-  world.clear();
-  const noise = createNoise(123);
-  const cx = 32, cz = 32; // Center
+export function buildHubWorld() {
+  const W = 40, H = 30;
+  const tiles = [];
 
-  // Generate terrain (gentle hills)
-  for (let x = 0; x < world.sizeX; x++) {
-    for (let z = 0; z < world.sizeZ; z++) {
-      const n = octaveNoise(noise, x * 0.04, z * 0.04, 3, 0.5);
-      const height = Math.floor(8 + n * 3);
-
-      for (let y = 0; y <= height; y++) {
-        if (y === height) {
-          world.setBlock(x, y, z, BLOCKS.GRASS);
-        } else if (y > height - 3) {
-          world.setBlock(x, y, z, BLOCKS.DIRT);
-        } else {
-          world.setBlock(x, y, z, BLOCKS.STONE);
-        }
-      }
-
-      // Flowers scattered around
-      if (Math.random() < 0.03 && world.getBlock(x, height, z) === BLOCKS.GRASS) {
-        world.setBlock(x, height + 1, z, Math.random() < 0.5 ? BLOCKS.FLOWER_RED : BLOCKS.FLOWER_YELLOW);
-      }
+  // Fill with grass
+  for (let y = 0; y < H; y++) {
+    tiles[y] = [];
+    for (let x = 0; x < W; x++) {
+      tiles[y][x] = TILES.GRASS;
     }
   }
 
-  // Central platform (raised area)
-  const platformY = 10;
-  for (let x = cx - 6; x <= cx + 6; x++) {
-    for (let z = cz - 6; z <= cz + 6; z++) {
-      const dist = Math.sqrt((x - cx) ** 2 + (z - cz) ** 2);
-      if (dist <= 6) {
-        // Fill up to platform height
-        for (let y = world.getHeight(x, z); y <= platformY; y++) {
-          world.setBlock(x, y, z, y === platformY ? BLOCKS.GRASS : BLOCKS.DIRT);
-        }
+  // Water border (top, left edges)
+  for (let x = 0; x < W; x++) {
+    tiles[0][x] = TILES.WATER;
+    tiles[H - 1][x] = TILES.WATER;
+  }
+  for (let y = 0; y < H; y++) {
+    tiles[y][0] = TILES.WATER;
+    tiles[y][W - 1] = TILES.WATER;
+  }
+
+  // Water pond (bottom-right)
+  for (let y = 22; y < 27; y++) {
+    for (let x = 30; x < 37; x++) {
+      const dx = x - 33, dy = y - 24.5;
+      if (dx * dx / 12 + dy * dy / 6 < 1) {
+        tiles[y][x] = TILES.WATER;
       }
     }
   }
 
-  // Stairway up to platform
-  for (let i = 0; i < 5; i++) {
-    const sy = platformY - 4 + i;
-    world.setBlock(cx - 7 + i, sy, cz, BLOCKS.COBBLESTONE);
-    world.setBlock(cx - 7 + i, sy, cz + 1, BLOCKS.COBBLESTONE);
-    // Clear above stairs
-    for (let h = 1; h <= 3; h++) {
-      world.setBlock(cx - 7 + i, sy + h, cz, BLOCKS.AIR);
-      world.setBlock(cx - 7 + i, sy + h, cz + 1, BLOCKS.AIR);
-    }
+  // Paths - cross pattern from center
+  const cx = 20, cy = 15;
+  // Horizontal path
+  for (let x = 5; x < 35; x++) {
+    tiles[cy][x] = TILES.PATH;
+    tiles[cy - 1][x] = TILES.PATH;
+  }
+  // Vertical path
+  for (let y = 3; y < 27; y++) {
+    tiles[y][cx] = TILES.PATH;
+    tiles[y][cx + 1] = TILES.PATH;
   }
 
-  // Central treehouse
-  const treeX = cx, treeZ = cz;
-  const treeBase = platformY + 1;
-
-  // Large tree trunk
-  for (let y = treeBase; y < treeBase + 8; y++) {
-    world.setBlock(treeX, y, treeZ, BLOCKS.WOOD);
-    world.setBlock(treeX + 1, y, treeZ, BLOCKS.WOOD);
-    world.setBlock(treeX, y, treeZ + 1, BLOCKS.WOOD);
-    world.setBlock(treeX + 1, y, treeZ + 1, BLOCKS.WOOD);
+  // Path to portals
+  // Left portal area
+  for (let y = 13; y < 17; y++) {
+    for (let x = 2; x < 7; x++) tiles[y][x] = TILES.PATH;
+  }
+  // Right portal area
+  for (let y = 13; y < 17; y++) {
+    for (let x = 33; x < 38; x++) tiles[y][x] = TILES.PATH;
+  }
+  // Top portal area
+  for (let x = 18; x < 23; x++) {
+    for (let y = 2; y < 6; y++) tiles[y][x] = TILES.PATH;
   }
 
-  // Tree canopy (large)
-  const canopyY = treeBase + 6;
-  for (let dx = -4; dx <= 5; dx++) {
-    for (let dz = -4; dz <= 5; dz++) {
-      for (let dy = 0; dy <= 3; dy++) {
-        const r = 4 - dy;
-        if (dx * dx + dz * dz <= r * r + 2) {
-          const bx = treeX + dx, by = canopyY + dy, bz = treeZ + dz;
-          if (world.getBlock(bx, by, bz) === BLOCKS.AIR) {
-            world.setBlock(bx, by, bz, BLOCKS.LEAVES);
-          }
-        }
-      }
-    }
-  }
-
-  // Small platform in tree (treehouse floor)
-  const housePlatY = treeBase + 4;
-  for (let dx = -2; dx <= 3; dx++) {
-    for (let dz = -2; dz <= 3; dz++) {
-      world.setBlock(treeX + dx, housePlatY, treeZ + dz, BLOCKS.PLANKS);
-    }
-  }
-
-  // Decorative trees around the hub
-  const treePositions = [
-    [10, 15], [15, 10], [50, 15], [48, 50], [12, 48],
-    [20, 45], [45, 20], [8, 30], [55, 35], [30, 55],
+  // Flower patches
+  const flowerSpots = [
+    [8, 8], [10, 10], [12, 7], [28, 8], [30, 10], [32, 7],
+    [8, 22], [10, 20], [12, 23], [28, 22], [30, 20], [14, 5],
+    [26, 5], [15, 25], [25, 25], [7, 14], [33, 14],
   ];
-  for (const [tx, tz] of treePositions) {
-    const h = world.getHeight(tx, tz);
-    if (h > 0) {
-      world.buildTree(tx, h, tz, 4 + Math.floor(Math.random() * 3));
+  for (const [x, y] of flowerSpots) {
+    if (tiles[y] && tiles[y][x] === TILES.GRASS) {
+      tiles[y][x] = TILES.GRASS_FLOWER;
     }
   }
 
-  // === PORTALS ===
+  // Decorations
+  const decorations = [
+    // Central big tree
+    { type: DECOR.TREE, x: 19, y: 13 },
 
-  // Portal 1: Magický les (Magic Forest) - green
-  const p1x = cx - 12, p1z = cz;
-  const p1y = world.getHeight(p1x, p1z);
-  // Platform
-  for (let dx = -1; dx <= 5; dx++) {
-    for (let dz = -1; dz <= 1; dz++) {
-      world.setBlock(p1x + dx, p1y, p1z + dz, BLOCKS.MOSS);
-    }
-  }
-  world.buildPortal(p1x, p1y + 1, p1z);
-  world.addInteractable(p1x + 2, p1y + 2, p1z, {
-    type: 'portal',
-    world: 'forest',
-    name: 'Magický les',
-    description: 'Vstupte do tajemného lesa plného hádanek a kouzel!',
-  });
+    // Trees around edges
+    { type: DECOR.TREE, x: 3, y: 3 },
+    { type: DECOR.TREE, x: 7, y: 4 },
+    { type: DECOR.TREE, x: 35, y: 3 },
+    { type: DECOR.TREE, x: 32, y: 5 },
+    { type: DECOR.TREE, x: 3, y: 25 },
+    { type: DECOR.TREE, x: 7, y: 26 },
+    { type: DECOR.TREE, x: 35, y: 25 },
 
-  // Sign for portal 1
-  world.setBlock(p1x - 1, p1y + 1, p1z + 2, BLOCKS.PLANKS);
-  world.setBlock(p1x - 1, p1y + 2, p1z + 2, BLOCKS.PLANKS);
+    // Flowers
+    { type: DECOR.FLOWER_RED, x: 9, y: 9 },
+    { type: DECOR.FLOWER_YELLOW, x: 11, y: 11 },
+    { type: DECOR.FLOWER_BLUE, x: 13, y: 8 },
+    { type: DECOR.FLOWER_RED, x: 29, y: 9 },
+    { type: DECOR.FLOWER_YELLOW, x: 31, y: 11 },
+    { type: DECOR.FLOWER_PURPLE, x: 27, y: 7 },
+    { type: DECOR.FLOWER_BLUE, x: 15, y: 22 },
+    { type: DECOR.FLOWER_RED, x: 25, y: 22 },
 
-  // Portal 2: Podmořský svět (Underwater) - blue
-  const p2x = cx, p2z = cz + 14;
-  const p2y = world.getHeight(p2x, p2z);
-  for (let dx = -1; dx <= 5; dx++) {
-    for (let dz = -1; dz <= 1; dz++) {
-      world.setBlock(p2x + dx, p2y, p2z + dz, BLOCKS.SAND);
-    }
-  }
-  world.buildPortal(p2x, p2y + 1, p2z);
-  world.addInteractable(p2x + 2, p2y + 2, p2z, {
-    type: 'portal',
-    world: 'underwater',
-    name: 'Podmořský svět',
-    description: 'Ponořte se do hlubin oceánu a objevte korálové tajemství!',
-  });
+    // Rocks
+    { type: DECOR.ROCK, x: 14, y: 4 },
+    { type: DECOR.ROCK, x: 26, y: 4 },
+    { type: DECOR.ROCK, x: 6, y: 19 },
+    { type: DECOR.ROCK_BIG, x: 28, y: 24 },
 
-  // Portal 3: Vesmírná stanice (Space) - purple
-  const p3x = cx + 12, p3z = cz;
-  const p3y = world.getHeight(p3x, p3z);
-  for (let dx = -1; dx <= 5; dx++) {
-    for (let dz = -1; dz <= 1; dz++) {
-      world.setBlock(p3x + dx, p3y, p3z + dz, BLOCKS.METAL);
-    }
-  }
-  world.buildPortal(p3x, p3y + 1, p3z);
-  world.addInteractable(p3x + 2, p3y + 2, p3z, {
-    type: 'portal',
-    world: 'space',
-    name: 'Vesmírná stanice',
-    description: 'Vydejte se do vesmíru a opravte stanici!',
-  });
+    // Bushes
+    { type: DECOR.BUSH, x: 5, y: 10 },
+    { type: DECOR.BUSH, x: 34, y: 10 },
+    { type: DECOR.BUSH, x: 5, y: 20 },
+    { type: DECOR.BUSH, x: 34, y: 20 },
 
-  // Welcome sign near spawn
-  world.setBlock(cx - 3, platformY + 1, cz - 4, BLOCKS.PLANKS);
-  world.setBlock(cx - 3, platformY + 2, cz - 4, BLOCKS.PLANKS);
-  world.addInteractable(cx - 3, platformY + 2, cz - 4, {
-    type: 'sign',
-    text: 'Vítejte, dobrodruzi! Společně prozkoumejte portály a vyřešte hádanky v každém světě.',
-  });
+    // Mushrooms
+    { type: DECOR.MUSHROOM_RED, x: 11, y: 5 },
+    { type: DECOR.MUSHROOM_BLUE, x: 29, y: 24 },
 
-  // Small pond
-  for (let dx = -3; dx <= 3; dx++) {
-    for (let dz = -3; dz <= 3; dz++) {
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist <= 3) {
-        const px = cx + 8 + dx, pz = cz - 8 + dz;
-        const h = world.getHeight(px, pz);
-        world.setBlock(px, h - 1, pz, BLOCKS.SAND);
-        world.setBlock(px, h, pz, BLOCKS.AIR);
-        if (dist <= 2) {
-          world.setBlock(px, h - 1, pz, BLOCKS.WATER);
-        }
-      }
-    }
-  }
+    // Sign near spawn
+    { type: DECOR.SIGN, x: 22, y: 18 },
+  ];
+
+  // Portals
+  const portals = [
+    { x: 4, y: 14, targetWorld: 'forest', label: 'Les' },
+    { x: 35, y: 14, targetWorld: 'ocean', label: 'Oceán' },
+    { x: 20, y: 3, targetWorld: 'space', label: 'Vesmír' },
+  ];
+
+  // NPCs
+  const npcs = [
+    {
+      npcType: 'rozumelka',
+      x: 18,
+      y: 17,
+      canInteract: true,
+      dialogs: [
+        'Ahoj Míšo a Kristinko! Jsem Rozumělka.',
+        'Prchavec Zmatek zamíchal všechny světy!',
+        'Potřebuji vaši pomoc - Míšo, tvoje čísla, a Kristinko, tvoje barvy dokážou všechno napravit!',
+        'Vidíte ten strom uprostřed? Potřebuje Léčivé semínko!',
+        'Spolupracujte - Míša spočítá a Kristinka namíchá barvu.',
+      ],
+    },
+  ];
+
+  // Puzzles
+  const puzzles = [
+    {
+      id: 'hub_seed',
+      x: 20,
+      y: 12,
+      name: 'Léčivé semínko',
+      type: 'seed',
+    },
+  ];
 
   return {
-    spawnPoint: { x: cx - 5, y: platformY + 1, z: cz },
-    skyColors: { top: 0x4a90d9, bottom: 0x87CEEB, fog: 0x87CEEB },
-    name: 'Základna Dobrodruhů',
+    name: 'Louka Harmonie',
+    width: W,
+    height: H,
+    tiles,
+    decorations,
+    portals,
+    npcs,
+    puzzles,
+    spawnX: 20,
+    spawnY: 20,
+    bgColor: '#3a8a4a',
+    skyColor: '#88ccff',
   };
 }

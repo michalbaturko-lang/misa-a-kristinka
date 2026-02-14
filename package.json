@@ -1,7 +1,7 @@
 {
   "name": "misa-a-kristinka-dobrodruzi",
   "version": "1.0.0",
-  "description": "Kooperativní 3D voxelová hra pro Míšu a Kristinku",
+  "description": "Kooperativní 2.5D pixel art hra pro Míšu a Kristinku",
   "type": "module",
   "scripts": {
     "dev": "node server.js",
@@ -11,8 +11,7 @@
   "dependencies": {
     "express": "^4.18.2",
     "socket.io": "^4.7.2",
-    "socket.io-client": "^4.7.2",
-    "three": "^0.160.0"
+    "socket.io-client": "^4.7.2"
   },
   "devDependencies": {
     "vite": "^5.0.0"

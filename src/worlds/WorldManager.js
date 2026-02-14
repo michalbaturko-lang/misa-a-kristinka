@@ -1,49 +1,51 @@
-import { VoxelWorld } from '../engine/VoxelWorld.js';
 import { buildHubWorld } from './HubWorld.js';
 import { buildForestWorld } from './ForestWorld.js';
-import { buildUnderwaterWorld } from './UnderwaterWorld.js';
-import { buildSpaceWorld } from './SpaceWorld.js';
+import { TILES, TILE_SIZE } from '../utils/constants.js';
 
 /**
- * WorldManager - handles loading/switching between worlds
+ * WorldManager - loads and manages tile-based worlds.
  */
 export class WorldManager {
   constructor() {
+    this.builders = {
+      hub: buildHubWorld,
+      forest: buildForestWorld,
+    };
     this.currentWorld = null;
-    this.currentWorldName = null;
-    this.voxelWorld = new VoxelWorld(64, 40, 64);
-    this.worldInfo = null;
+    this.worldData = null;
   }
 
-  loadWorld(worldName, scene) {
-    console.log(`Loading world: ${worldName}`);
-    this.currentWorldName = worldName;
-
-    let builder;
-    switch (worldName) {
-      case 'hub': builder = buildHubWorld; break;
-      case 'forest': builder = buildForestWorld; break;
-      case 'underwater': builder = buildUnderwaterWorld; break;
-      case 'space': builder = buildSpaceWorld; break;
-      default:
-        console.error(`Unknown world: ${worldName}`);
-        builder = buildHubWorld;
+  loadWorld(worldName) {
+    const builder = this.builders[worldName];
+    if (!builder) {
+      console.warn(`World "${worldName}" not implemented, loading hub`);
+      this.worldData = buildHubWorld();
+    } else {
+      this.worldData = builder();
     }
-
-    this.worldInfo = builder(this.voxelWorld);
-    this.voxelWorld.buildMesh(scene);
-    return this.worldInfo;
+    this.currentWorld = worldName;
+    return this.worldData;
   }
 
-  getSpawnPoint() {
-    return this.worldInfo?.spawnPoint || { x: 32, y: 15, z: 32 };
+  getWorld() {
+    return this.worldData;
   }
 
-  getSkyColors() {
-    return this.worldInfo?.skyColors || { top: 0x4a90d9, bottom: 0x87CEEB, fog: 0x87CEEB };
+  getTile(tx, ty) {
+    if (!this.worldData) return TILES.EMPTY;
+    if (tx < 0 || ty < 0 || tx >= this.worldData.width || ty >= this.worldData.height) return TILES.EMPTY;
+    return this.worldData.tiles[ty][tx];
   }
 
-  getWorldName() {
-    return this.worldInfo?.name || 'Neznámý svět';
-  }
+  // Delegate methods so world can be used directly
+  get width() { return this.worldData ? this.worldData.width : 0; }
+  get height() { return this.worldData ? this.worldData.height : 0; }
+  get decorations() { return this.worldData ? this.worldData.decorations : []; }
+  get portals() { return this.worldData ? this.worldData.portals : []; }
+  get npcs() { return this.worldData ? this.worldData.npcs : []; }
+  get puzzles() { return this.worldData ? this.worldData.puzzles : []; }
+  get name() { return this.worldData ? this.worldData.name : ''; }
+  get bgColor() { return this.worldData ? this.worldData.bgColor : '#000'; }
+  get spawnX() { return this.worldData ? this.worldData.spawnX : 5; }
+  get spawnY() { return this.worldData ? this.worldData.spawnY : 5; }
 }

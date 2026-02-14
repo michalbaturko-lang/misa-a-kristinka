@@ -2,169 +2,80 @@
 <html lang="cs">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="mobile-web-app-capable" content="yes">
-  <title>Misa & Kristinka - Dobrodruzi</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Míša & Kristinka - Dobrodruzi</title>
   <link rel="stylesheet" href="/styles/game.css">
 </head>
 <body>
-  <div id="game-container">
-    <canvas id="game-canvas"></canvas>
+  <!-- Game Canvas -->
+  <canvas id="game-canvas"></canvas>
 
-    <!-- Start Screen -->
-    <div id="start-screen" class="screen active">
-      <canvas id="start-bg-canvas" class="start-bg-canvas"></canvas>
-      <div class="start-content">
-        <div class="title-container">
-          <h1 class="game-title">Misa & Kristinka</h1>
-          <h2 class="game-subtitle">Dobrodruzi</h2>
-        </div>
-        <div class="character-select">
-          <h3>Vyber si svou postavu:</h3>
-          <div class="character-cards">
-            <div class="character-card" data-role="mathematician">
-              <div class="character-avatar">
-                <canvas id="misa-avatar-canvas" width="80" height="80"></canvas>
-              </div>
-              <h4>Misa</h4>
-              <p class="character-desc">Carodej cisel</p>
-              <p class="character-power">Resi matematicke hadanky a odemyka tajemstvi cisel</p>
-            </div>
-            <div class="character-card" data-role="artist">
-              <div class="character-avatar">
-                <canvas id="kristinka-avatar-canvas" width="80" height="80"></canvas>
-              </div>
-              <h4>Kristinka</h4>
-              <p class="character-desc">Umelkyne</p>
-              <p class="character-power">Maluje, tvori vzory a ozivuje svet barvami</p>
-            </div>
-          </div>
-        </div>
-        <div id="waiting-message" class="hidden">
-          <div class="waiting-spinner"></div>
-          <p>Cekam na kamarada...</p>
-          <p class="room-code">Kod mistnosti: <span id="room-code-display"></span></p>
-        </div>
-        <div id="room-setup" class="hidden">
-          <button id="create-room-btn" class="btn btn-primary">Vytvorit novou hru</button>
-          <div class="room-divider">nebo</div>
-          <div class="join-room">
-            <input type="text" id="room-code-input" placeholder="Zadej kod mistnosti" maxlength="6">
-            <button id="join-room-btn" class="btn btn-secondary">Pripojit se</button>
-          </div>
-        </div>
-      </div>
-    </div>
+  <!-- Start Screen (HTML overlay) -->
+  <div id="start-screen">
+    <div class="start-content">
+      <h1 class="game-title">Míša & Kristinka</h1>
+      <h2 class="game-subtitle">Dobrodruzi</h2>
 
-    <!-- HUD -->
-    <div id="hud" class="screen hidden">
-      <div id="hud-top">
-        <div id="player-info">
-          <div id="player-role-icon"></div>
-          <span id="player-name"></span>
+      <div class="char-select">
+        <div class="char-card" id="card-misa">
+          <canvas id="portrait-misa" width="64" height="64"></canvas>
+          <div class="char-name">★ Míša</div>
+          <div class="char-desc">Čaroděj čísel</div>
         </div>
-        <div id="stars-counter">
-          <span class="star-icon"></span>
-          <span id="stars-count">0</span>
-        </div>
-      </div>
-      <div id="partner-indicator" class="hidden">
-        <div class="partner-arrow"></div>
-        <span id="partner-name"></span>
-      </div>
-      <div id="quest-notification" class="hidden">
-        <p id="quest-text"></p>
-      </div>
-      <div id="interaction-prompt" class="hidden">
-        <button id="interact-btn" class="btn btn-interact">Interakce</button>
-      </div>
-    </div>
-
-    <!-- Math Puzzle UI -->
-    <div id="math-puzzle-screen" class="screen hidden">
-      <div class="puzzle-container">
-        <h3 id="math-puzzle-title">Matematicka hadanka</h3>
-        <div id="math-puzzle-question"></div>
-        <div id="math-puzzle-input">
-          <div id="math-answer-display">?</div>
-          <div class="numpad">
-            <button class="numpad-btn" data-num="1">1</button>
-            <button class="numpad-btn" data-num="2">2</button>
-            <button class="numpad-btn" data-num="3">3</button>
-            <button class="numpad-btn" data-num="4">4</button>
-            <button class="numpad-btn" data-num="5">5</button>
-            <button class="numpad-btn" data-num="6">6</button>
-            <button class="numpad-btn" data-num="7">7</button>
-            <button class="numpad-btn" data-num="8">8</button>
-            <button class="numpad-btn" data-num="9">9</button>
-            <button class="numpad-btn numpad-clear" data-num="clear">X</button>
-            <button class="numpad-btn" data-num="0">0</button>
-            <button class="numpad-btn numpad-submit" data-num="submit">OK</button>
-          </div>
-        </div>
-        <div id="math-puzzle-feedback" class="hidden"></div>
-        <button id="math-puzzle-close" class="btn btn-close">Zavrit</button>
-      </div>
-    </div>
-
-    <!-- Creative Puzzle UI -->
-    <div id="creative-puzzle-screen" class="screen hidden">
-      <div class="puzzle-container">
-        <h3 id="creative-puzzle-title">Tvurci ukol</h3>
-        <div id="creative-puzzle-instruction"></div>
-        <div id="creative-puzzle-area">
-          <canvas id="creative-canvas" width="300" height="300"></canvas>
-          <div id="color-palette">
-            <div class="color-swatch" data-color="#e74c3c" style="background:#e74c3c"></div>
-            <div class="color-swatch" data-color="#e67e22" style="background:#e67e22"></div>
-            <div class="color-swatch" data-color="#f1c40f" style="background:#f1c40f"></div>
-            <div class="color-swatch" data-color="#2ecc71" style="background:#2ecc71"></div>
-            <div class="color-swatch" data-color="#3498db" style="background:#3498db"></div>
-            <div class="color-swatch" data-color="#9b59b6" style="background:#9b59b6"></div>
-            <div class="color-swatch" data-color="#e91e8f" style="background:#e91e8f"></div>
-            <div class="color-swatch" data-color="#ffffff" style="background:#ffffff"></div>
-          </div>
-          <div id="pattern-grid" class="hidden"></div>
-        </div>
-        <div id="creative-puzzle-feedback" class="hidden"></div>
-        <button id="creative-submit" class="btn btn-primary">Hotovo!</button>
-        <button id="creative-puzzle-close" class="btn btn-close">Zavrit</button>
-      </div>
-    </div>
-
-    <!-- Dialog Box -->
-    <div id="dialog-box" class="hidden">
-      <div class="dialog-content">
-        <div id="dialog-speaker"></div>
-        <p id="dialog-text"></p>
-        <button id="dialog-next" class="btn btn-small">Dalsi</button>
-      </div>
-    </div>
-
-    <!-- Celebration overlay -->
-    <div id="celebration-overlay" class="hidden">
-      <div class="celebration-content">
-        <h2 id="celebration-title"></h2>
-        <div class="celebration-stars">*  *  *</div>
-        <p id="celebration-text"></p>
-      </div>
-    </div>
-
-    <!-- Touch Controls -->
-    <div id="touch-controls" class="hidden">
-      <div id="joystick-zone">
-        <div id="joystick-base">
-          <div id="joystick-thumb"></div>
+        <div class="char-card" id="card-kristinka">
+          <canvas id="portrait-kristinka" width="64" height="64"></canvas>
+          <div class="char-name">♥ Kristinka</div>
+          <div class="char-desc">Umělkyně barev</div>
         </div>
       </div>
-      <div id="action-buttons">
-        <button id="jump-btn" class="action-btn jump-btn">^</button>
-        <button id="ability-btn" class="action-btn ability">*</button>
+
+      <div class="room-actions">
+        <button id="btn-create" class="btn btn-primary">Vytvořit místnost</button>
+        <div class="join-row">
+          <input id="room-code-input" type="text" placeholder="Kód místnosti" maxlength="5" class="input-code">
+          <button id="btn-join" class="btn btn-secondary">Připojit se</button>
+        </div>
       </div>
     </div>
   </div>
+
+  <!-- Lobby Screen -->
+  <div id="lobby-screen" style="display:none">
+    <div class="lobby-content">
+      <h2>Čekáme na spoluhráče...</h2>
+      <div class="lobby-code-display">
+        Kód: <span id="lobby-code"></span>
+      </div>
+      <p class="lobby-hint">Řekni kamarádovi tento kód!</p>
+      <div id="lobby-players"></div>
+    </div>
+  </div>
+
+  <!-- Game UI (shown during gameplay) -->
+  <div id="game-ui" style="display:none">
+    <!-- D-pad (touch only) -->
+    <div id="dpad" style="display:none">
+      <button id="dpad-up" class="dpad-btn dpad-up">▲</button>
+      <button id="dpad-left" class="dpad-btn dpad-left">◄</button>
+      <button id="dpad-right" class="dpad-btn dpad-right">►</button>
+      <button id="dpad-down" class="dpad-btn dpad-down">▼</button>
+    </div>
+
+    <!-- Action buttons (touch only) -->
+    <div id="action-buttons" style="display:none">
+      <button id="btn-interact" class="action-btn btn-interact">E</button>
+      <button id="btn-jump" class="action-btn btn-jump">↑</button>
+    </div>
+  </div>
+
+  <!-- Puzzle Overlay -->
+  <div id="puzzle-overlay" style="display:none"></div>
+
+  <!-- Celebration Overlay -->
+  <div id="celebration-overlay" style="display:none"></div>
+
+  <!-- Message toast -->
+  <div id="message" style="display:none"></div>
 
   <script type="module" src="/src/main.js"></script>
 </body>

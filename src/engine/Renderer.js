@@ -1,221 +1,220 @@
-import * as THREE from 'three';
+import { TILE_SIZE, CHAR_W, CHAR_H, TILES } from '../utils/constants.js';
+import { lerp, createCanvas } from '../utils/helpers.js';
 
 /**
- * Renderer - Three.js setup with procedural cloud sky, better lighting
+ * Canvas 2D Renderer - top-down pixel art game.
+ * Offscreen buffer at logical resolution, scaled up crisp.
  */
 export class Renderer {
-  constructor(canvas) {
+  constructor(canvas, sprites) {
     this.canvas = canvas;
-    this.width = window.innerWidth;
-    this.height = window.innerHeight;
-
-    this.scene = new THREE.Scene();
-
-    this.camera = new THREE.PerspectiveCamera(65, this.width / this.height, 0.1, 200);
-    this.camera.position.set(32, 20, 40);
-    this.camera.lookAt(32, 10, 32);
-
-    this.renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: false,
-      powerPreference: 'high-performance',
-      alpha: false,
-    });
-    this.renderer.setSize(this.width, this.height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.BasicShadowMap;
-    this.renderer.setClearColor(0x87CEEB);
-
-    this.scene.fog = new THREE.Fog(0x87CEEB, 40, 80);
-
-    this.clouds = [];
-    this.setupLighting();
-    this.setupSkybox();
-    this.setupClouds();
-
-    window.addEventListener('resize', () => this.onResize());
-    window.addEventListener('orientationchange', () => {
-      setTimeout(() => this.onResize(), 100);
-    });
+    this.ctx = canvas.getContext('2d');
+    this.sprites = sprites;
+    this.logicalW = 256;
+    this.logicalH = 192;
+    const buf = createCanvas(this.logicalW, this.logicalH);
+    this.buffer = buf.canvas;
+    this.bufCtx = buf.ctx;
+    this.camX = 0; this.camY = 0;
+    this.targetCamX = 0; this.targetCamY = 0;
+    this.waterFrame = 0; this.waterTimer = 0;
+    this.portalFrame = 0; this.portalTimer = 0;
+    this.shakeAmount = 0; this.time = 0;
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
   }
 
-  setupLighting() {
-    const ambient = new THREE.AmbientLight(0xfff5e6, 0.55);
-    this.scene.add(ambient);
-
-    const hemi = new THREE.HemisphereLight(0x87CEEB, 0x8B6914, 0.35);
-    this.scene.add(hemi);
-
-    this.sunLight = new THREE.DirectionalLight(0xfff0d0, 0.9);
-    this.sunLight.position.set(25, 50, 25);
-    this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.width = 1024;
-    this.sunLight.shadow.mapSize.height = 1024;
-    this.sunLight.shadow.camera.near = 1;
-    this.sunLight.shadow.camera.far = 100;
-    this.sunLight.shadow.camera.left = -40;
-    this.sunLight.shadow.camera.right = 40;
-    this.sunLight.shadow.camera.top = 40;
-    this.sunLight.shadow.camera.bottom = -40;
-    this.sunLight.shadow.bias = -0.001;
-    this.scene.add(this.sunLight);
+  resize() {
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
+    this.ctx.imageSmoothingEnabled = false;
+    const sx = this.canvas.width / this.logicalW;
+    const sy = this.canvas.height / this.logicalH;
+    this.renderScale = Math.min(sx, sy);
+    this.offsetX = Math.floor((this.canvas.width - this.logicalW * this.renderScale) / 2);
+    this.offsetY = Math.floor((this.canvas.height - this.logicalH * this.renderScale) / 2);
   }
 
-  setupSkybox() {
-    const skyGeo = new THREE.SphereGeometry(150, 32, 32);
-    const skyMat = new THREE.ShaderMaterial({
-      uniforms: {
-        topColor: { value: new THREE.Color(0x1a6bbf) },
-        midColor: { value: new THREE.Color(0x5da0d9) },
-        bottomColor: { value: new THREE.Color(0x87CEEB) },
-        sunDir: { value: new THREE.Vector3(0.4, 0.6, 0.4).normalize() },
-        time: { value: 0 },
-      },
-      vertexShader: `
-        varying vec3 vNormal;
-        void main() {
-          vNormal = normalize(position);
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 topColor;
-        uniform vec3 midColor;
-        uniform vec3 bottomColor;
-        uniform vec3 sunDir;
-        uniform float time;
-        varying vec3 vNormal;
+  setCamera(x, y) { this.targetCamX = x; this.targetCamY = y; }
+  snapCamera(x, y) { this.camX = this.targetCamX = x; this.camY = this.targetCamY = y; }
 
-        float hash(vec2 p) {
-          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-        }
-        float noise(vec2 p) {
-          vec2 i = floor(p);
-          vec2 f = fract(p);
-          f = f * f * (3.0 - 2.0 * f);
-          return mix(mix(hash(i), hash(i + vec2(1,0)), f.x),
-                     mix(hash(i + vec2(0,1)), hash(i + vec2(1,1)), f.x), f.y);
-        }
-        float fbm(vec2 p) {
-          float v = 0.0, a = 0.5;
-          for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.0; a *= 0.5; }
-          return v;
-        }
-
-        void main() {
-          vec3 dir = normalize(vNormal);
-          float h = dir.y;
-          vec3 sky = h > 0.0 ? mix(midColor, topColor, pow(h, 0.6))
-                              : mix(midColor, bottomColor, pow(-h, 0.3));
-
-          // Sun glow
-          float sunDot = max(dot(dir, sunDir), 0.0);
-          sky += vec3(1.0, 0.95, 0.85) * pow(sunDot, 32.0) * 0.4;
-          sky += vec3(1.0, 0.95, 0.85) * pow(sunDot, 8.0) * 0.1;
-
-          // Clouds in sky
-          if (h > 0.05) {
-            vec2 uv = dir.xz / (h + 0.1) * 3.0 + time * 0.02;
-            float cloud = smoothstep(0.35, 0.65, fbm(uv));
-            sky = mix(sky, vec3(1.0), cloud * smoothstep(0.05, 0.3, h) * 0.8);
-          }
-
-          gl_FragColor = vec4(sky, 1.0);
-        }
-      `,
-      side: THREE.BackSide,
-      depthWrite: false,
-    });
-    this.sky = new THREE.Mesh(skyGeo, skyMat);
-    this.scene.add(this.sky);
+  update(dt) {
+    this.time += dt;
+    this.camX = lerp(this.camX, this.targetCamX, 0.08);
+    this.camY = lerp(this.camY, this.targetCamY, 0.08);
+    this.waterTimer += dt;
+    if (this.waterTimer > 0.3) { this.waterTimer -= 0.3; this.waterFrame = (this.waterFrame + 1) % 4; }
+    this.portalTimer += dt;
+    if (this.portalTimer > 0.12) { this.portalTimer -= 0.12; this.portalFrame = (this.portalFrame + 1) % 8; }
+    if (this.shakeAmount > 0.1) this.shakeAmount *= 0.9; else this.shakeAmount = 0;
   }
 
-  setupClouds() {
-    const cloudTex = this.createCloudTexture();
-    for (let i = 0; i < 15; i++) {
-      const mat = new THREE.SpriteMaterial({
-        map: cloudTex, transparent: true,
-        opacity: 0.5 + Math.random() * 0.3,
-        depthWrite: false, fog: false,
-      });
-      const sprite = new THREE.Sprite(mat);
-      const scale = 12 + Math.random() * 18;
-      sprite.scale.set(scale, scale * 0.35, 1);
-      sprite.position.set(
-        Math.random() * 120 - 28,
-        32 + Math.random() * 20,
-        Math.random() * 120 - 28
-      );
-      sprite.userData.speed = 0.2 + Math.random() * 0.4;
-      sprite.userData.baseX = sprite.position.x;
-      this.scene.add(sprite);
-      this.clouds.push(sprite);
+  shake(amount) { this.shakeAmount = amount || 3; }
+
+  w2s(wx, wy) {
+    const sx = this.shakeAmount ? (Math.random() - 0.5) * this.shakeAmount : 0;
+    const sy = this.shakeAmount ? (Math.random() - 0.5) * this.shakeAmount : 0;
+    return { x: Math.floor(wx - this.camX + this.logicalW / 2 + sx), y: Math.floor(wy - this.camY + this.logicalH / 2 + sy) };
+  }
+
+  screenToWorld(scx, scy) {
+    const lx = (scx - this.offsetX) / this.renderScale;
+    const ly = (scy - this.offsetY) / this.renderScale;
+    return { x: lx + this.camX - this.logicalW / 2, y: ly + this.camY - this.logicalH / 2 };
+  }
+
+  beginFrame(bgColor) {
+    this.bufCtx.fillStyle = bgColor || '#4a8a4a';
+    this.bufCtx.fillRect(0, 0, this.logicalW, this.logicalH);
+  }
+
+  drawTileMap(world) {
+    const c = this.bufCtx, ts = TILE_SIZE;
+    const x0 = Math.max(0, Math.floor((this.camX - this.logicalW / 2) / ts) - 1);
+    const y0 = Math.max(0, Math.floor((this.camY - this.logicalH / 2) / ts) - 1);
+    const x1 = Math.min(world.width, Math.ceil((this.camX + this.logicalW / 2) / ts) + 1);
+    const y1 = Math.min(world.height, Math.ceil((this.camY + this.logicalH / 2) / ts) + 1);
+    for (let ty = y0; ty < y1; ty++) {
+      for (let tx = x0; tx < x1; tx++) {
+        const tile = world.getTile(tx, ty);
+        if (tile === TILES.EMPTY) continue;
+        const sp = this.w2s(tx * ts, ty * ts);
+        let img;
+        switch (tile) {
+          case TILES.GRASS: img = this.sprites.getTile((tx + ty) % 2 ? 'grass' : 'grass2'); break;
+          case TILES.GRASS_DARK: img = this.sprites.getTile('grass_dark'); break;
+          case TILES.GRASS_FLOWER: img = this.sprites.getTile('grass_flower'); break;
+          case TILES.WATER: img = this.sprites.getTile('water', this.waterFrame); break;
+          case TILES.PATH: img = this.sprites.getTile('path'); break;
+          case TILES.DIRT: img = this.sprites.getTile('dirt'); break;
+          case TILES.SAND: img = this.sprites.getTile('sand'); break;
+          case TILES.STONE_FLOOR: img = this.sprites.getTile('stone_floor'); break;
+          case TILES.WOOD_FLOOR: img = this.sprites.getTile('wood_floor'); break;
+          case TILES.BRIDGE: img = this.sprites.getTile('bridge'); break;
+          case TILES.METAL_FLOOR: img = this.sprites.getTile('metal_floor'); break;
+          case TILES.CORAL_FLOOR: img = this.sprites.getTile('coral_floor'); break;
+          default: img = this.sprites.getTile('grass');
+        }
+        if (img) c.drawImage(img, sp.x, sp.y, ts, ts);
+      }
     }
   }
 
-  createCloudTexture() {
-    const s = 128;
-    const c = document.createElement('canvas');
-    c.width = s; c.height = s;
-    const ctx = c.getContext('2d');
-    const cx = s / 2, cy = s / 2;
-    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, s / 2);
-    g.addColorStop(0, 'rgba(255,255,255,0.8)');
-    g.addColorStop(0.4, 'rgba(255,255,255,0.5)');
-    g.addColorStop(0.7, 'rgba(255,255,255,0.15)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, s, s);
-    for (let i = 0; i < 4; i++) {
-      const px = cx + (Math.random() - 0.5) * s * 0.4;
-      const py = cy + (Math.random() - 0.5) * s * 0.25;
-      const pr = s * 0.12 + Math.random() * s * 0.12;
-      const g2 = ctx.createRadialGradient(px, py, 0, px, py, pr);
-      g2.addColorStop(0, 'rgba(255,255,255,0.4)');
-      g2.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g2;
-      ctx.beginPath();
-      ctx.arc(px, py, pr, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    const tex = new THREE.CanvasTexture(c);
-    tex.needsUpdate = true;
-    return tex;
+  drawDecoration(decor) {
+    let sprite = this.sprites.getDecoration(decor.type);
+    if (!sprite) return;
+    if (Array.isArray(sprite)) sprite = sprite[this.portalFrame % sprite.length];
+    const sp = this.w2s(decor.x * TILE_SIZE, decor.y * TILE_SIZE);
+    this.bufCtx.drawImage(sprite, sp.x + Math.floor((TILE_SIZE - sprite.width) / 2), sp.y + TILE_SIZE - sprite.height, sprite.width, sprite.height);
   }
 
-  updateClouds(time) {
-    for (const cloud of this.clouds) {
-      cloud.position.x = cloud.userData.baseX + Math.sin(time * 0.00008 * cloud.userData.speed) * 20;
-    }
-    if (this.sky && this.sky.material.uniforms) {
-      this.sky.material.uniforms.time.value = time * 0.001;
+  drawCharacter(sheet, x, y, dir, frame, alpha) {
+    const c = this.bufCtx, sp = this.w2s(x, y);
+    if (alpha != null && alpha < 1) c.globalAlpha = alpha;
+    c.drawImage(sheet, (frame % 4) * CHAR_W, dir * CHAR_H, CHAR_W, CHAR_H,
+      sp.x - CHAR_W / 2, sp.y - CHAR_H + 6, CHAR_W, CHAR_H);
+    if (alpha != null && alpha < 1) c.globalAlpha = 1;
+  }
+
+  drawNPC(npc) {
+    const c = this.bufCtx;
+    const sp = this.w2s(npc.x * TILE_SIZE + TILE_SIZE / 2, npc.y * TILE_SIZE + TILE_SIZE);
+    const sheet = this.sprites.getNPC(npc.npcType);
+    if (!sheet) return;
+    c.drawImage(sheet, (Math.floor(this.time * 1.5) % 2) * CHAR_W, 0, CHAR_W, CHAR_H,
+      sp.x - CHAR_W / 2, sp.y - CHAR_H + 6, CHAR_W, CHAR_H);
+    if (npc.canInteract) {
+      const bob = Math.sin(this.time * 4) * 2;
+      c.fillStyle = '#ffd700';
+      c.fillRect(sp.x - 1, sp.y - CHAR_H - 4 + bob, 3, 4);
+      c.fillRect(sp.x, sp.y - CHAR_H + 1 + bob, 1, 1);
     }
   }
 
-  setSkyColors(topColor, bottomColor, fogColor) {
-    if (this.sky && this.sky.material.uniforms) {
-      this.sky.material.uniforms.topColor.value.set(topColor);
-      this.sky.material.uniforms.bottomColor.value.set(fogColor);
-      this.sky.material.uniforms.midColor.value.set(bottomColor);
+  drawPortal(portal) {
+    const frames = this.sprites.getDecoration('portal');
+    if (!frames || !Array.isArray(frames)) return;
+    const sp = this.w2s(portal.x * TILE_SIZE, portal.y * TILE_SIZE);
+    this.bufCtx.drawImage(frames[this.portalFrame], sp.x - 8, sp.y - 16, 32, 32);
+    if (portal.label) {
+      this.bufCtx.fillStyle = '#fff'; this.bufCtx.font = '4px monospace';
+      const tw = this.bufCtx.measureText(portal.label).width;
+      this.bufCtx.fillText(portal.label, sp.x + TILE_SIZE / 2 - tw / 2 - 8, sp.y - 20);
     }
-    this.scene.fog.color.set(fogColor);
-    this.renderer.setClearColor(fogColor);
   }
 
-  onResize() {
-    this.width = window.innerWidth;
-    this.height = window.innerHeight;
-    this.camera.aspect = this.width / this.height;
-    this.camera.updateProjectionMatrix();
-    this.renderer.setSize(this.width, this.height);
+  drawParticles(particles) {
+    const c = this.bufCtx;
+    for (const p of particles) {
+      const sp = this.w2s(p.x, p.y);
+      c.globalAlpha = p.alpha || 1;
+      c.fillStyle = p.color;
+      c.fillRect(sp.x, sp.y, p.size || 1, p.size || 1);
+    }
+    c.globalAlpha = 1;
   }
 
-  render() {
-    this.renderer.render(this.scene, this.camera);
+  drawDialogBubble(wx, wy, text, charIdx) {
+    const c = this.bufCtx, sp = this.w2s(wx, wy);
+    const disp = text.substring(0, charIdx);
+    if (!disp.length) return;
+    const maxW = 90, lines = []; let line = '';
+    for (const w of disp.split(' ')) {
+      const t = line ? line + ' ' + w : w;
+      if (t.length * 3 > maxW && line) { lines.push(line); line = w; } else line = t;
+    }
+    if (line) lines.push(line);
+    const lh = 6, pad = 3, bw = maxW + pad * 2, bh = lines.length * lh + pad * 2;
+    const bx = Math.floor(sp.x - bw / 2), by = Math.floor(sp.y - bh - 10);
+    c.fillStyle = 'rgba(255,255,255,0.95)';
+    c.fillRect(bx, by, bw, bh); c.fillRect(sp.x - 2, by + bh, 4, 3);
+    c.strokeStyle = '#6040a0'; c.lineWidth = 0.5; c.strokeRect(bx, by, bw, bh);
+    c.fillStyle = '#2a2a3a'; c.font = '4px monospace';
+    for (let i = 0; i < lines.length; i++) c.fillText(lines[i], bx + pad, by + pad + (i + 1) * lh - 1);
   }
 
-  dispose() {
-    this.renderer.dispose();
+  drawInteractionPrompt(x, y, text) {
+    const c = this.bufCtx, sp = this.w2s(x, y);
+    const bob = Math.sin(this.time * 3) * 1.5;
+    c.font = '4px monospace';
+    const tw = c.measureText(text).width;
+    c.fillStyle = 'rgba(0,0,0,0.6)';
+    c.fillRect(sp.x - tw / 2 - 3, sp.y - CHAR_H - 12 + bob, tw + 6, 7);
+    c.fillStyle = '#ffd700';
+    c.fillText(text, sp.x - tw / 2, sp.y - CHAR_H - 7 + bob);
+  }
+
+  drawNameTag(x, y, name, color) {
+    const c = this.bufCtx, sp = this.w2s(x, y);
+    c.fillStyle = color || '#fff'; c.font = '3px monospace';
+    c.fillText(name, sp.x - c.measureText(name).width / 2, sp.y - CHAR_H + 2);
+  }
+
+  drawHUD(stars, role, roomCode, worldName) {
+    const c = this.ctx, w = this.canvas.width;
+    c.fillStyle = 'rgba(20,10,40,0.55)'; c.fillRect(0, 0, w, 48);
+    c.fillStyle = '#ffd700'; c.font = 'bold 22px "Segoe UI",sans-serif';
+    c.fillText(`★ ${stars}`, 14, 33);
+    if (role) {
+      c.fillStyle = role === 'mathematician' ? '#5898ff' : '#ff5878';
+      c.font = 'bold 16px "Segoe UI",sans-serif';
+      c.fillText(role === 'mathematician' ? '★ Míša' : '♥ Kristinka', 80, 31);
+    }
+    c.fillStyle = '#e8e0f0'; c.font = '15px "Segoe UI",sans-serif';
+    const wn = worldName || '';
+    c.fillText(wn, w / 2 - c.measureText(wn).width / 2, 31);
+    if (roomCode) {
+      c.fillStyle = 'rgba(255,255,255,0.6)'; c.font = '13px monospace';
+      const rc = `Kód: ${roomCode}`;
+      c.fillText(rc, w - c.measureText(rc).width - 14, 31);
+    }
+  }
+
+  endFrame() {
+    this.ctx.fillStyle = '#000';
+    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.drawImage(this.buffer, 0, 0, this.logicalW, this.logicalH,
+      this.offsetX, this.offsetY,
+      Math.floor(this.logicalW * this.renderScale), Math.floor(this.logicalH * this.renderScale));
   }
 }

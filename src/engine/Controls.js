@@ -1,282 +1,171 @@
-import { clamp } from '../utils/helpers.js';
+import { DIRECTIONS } from '../utils/constants.js';
 
 /**
- * Controls - enhanced touch controls
- * Bigger joystick zone, visual feedback, camera damping, button feedback
+ * Controls - D-pad (touch) + WASD/Arrows (keyboard).
+ * Returns movement direction and action button state.
  */
 export class Controls {
-  constructor(player) {
-    this.player = player;
-    this.active = false;
+  constructor() {
+    this.moveX = 0;
+    this.moveY = 0;
+    this.direction = DIRECTIONS.DOWN;
+    this.interact = false;
+    this.jump = false;
+    this.interactJustPressed = false;
+    this.jumpJustPressed = false;
 
-    // Joystick state
-    this.joystickActive = false;
-    this.joystickTouchId = null;
-    this.joystickStartX = 0;
-    this.joystickStartY = 0;
-    this.joystickX = 0;
-    this.joystickY = 0;
+    // Keyboard state
+    this.keys = {};
+    this._prevInteract = false;
+    this._prevJump = false;
 
-    // Smoothed movement input
-    this.smoothMoveX = 0;
-    this.smoothMoveZ = 0;
+    // D-pad touch state
+    this.dpadActive = false;
+    this.dpadTouchId = null;
+    this.dpadDir = null;
 
-    // Camera drag state
-    this.cameraTouchId = null;
-    this.cameraLastX = 0;
-    this.cameraLastY = 0;
-    this.cameraDragDeltaX = 0;
-    this.cameraDragDeltaY = 0;
+    // Touch buttons
+    this.touchInteract = false;
+    this.touchJump = false;
 
-    // DOM elements
-    this.joystickZone = document.getElementById('joystick-zone');
-    this.joystickBase = document.getElementById('joystick-base');
-    this.joystickThumb = document.getElementById('joystick-thumb');
-    this.jumpBtn = document.getElementById('jump-btn');
-    this.abilityBtn = document.getElementById('ability-btn');
-    this.touchControls = document.getElementById('touch-controls');
+    this.isTouchDevice = 'ontouchstart' in window;
 
-    // Callbacks
-    this.onJump = null;
-    this.onAbility = null;
-
-    this.setupTouchListeners();
-    this.setupKeyboardListeners();
+    this.setupKeyboard();
+    if (this.isTouchDevice) {
+      this.setupTouchUI();
+    }
   }
 
-  activate() {
-    this.active = true;
-    this.touchControls.classList.remove('hidden');
-    this.touchControls.classList.add('active');
-  }
-
-  deactivate() {
-    this.active = false;
-    this.touchControls.classList.add('hidden');
-    this.touchControls.classList.remove('active');
-    this.player.moveInput.x = 0;
-    this.player.moveInput.z = 0;
-    this.smoothMoveX = 0;
-    this.smoothMoveZ = 0;
-  }
-
-  setupTouchListeners() {
-    const canvas = document.getElementById('game-canvas');
-
-    // Joystick touch - dynamic positioning where user touches
-    this.joystickZone.addEventListener('touchstart', (e) => {
-      if (!this.active) return;
-      e.preventDefault();
-      const touch = e.changedTouches[0];
-      this.joystickTouchId = touch.identifier;
-      this.joystickActive = true;
-
-      // Move joystick base to touch point
-      const zoneRect = this.joystickZone.getBoundingClientRect();
-      const localX = touch.clientX - zoneRect.left;
-      const localY = touch.clientY - zoneRect.top;
-      this.joystickBase.style.left = (localX - 60) + 'px';
-      this.joystickBase.style.bottom = 'auto';
-      this.joystickBase.style.top = (localY - 60) + 'px';
-
-      this.joystickStartX = touch.clientX;
-      this.joystickStartY = touch.clientY;
-
-      // Visual feedback
-      this.joystickBase.classList.add('active');
-      this.joystickThumb.classList.add('active');
-    }, { passive: false });
-
-    // Camera touch (right side)
-    canvas.addEventListener('touchstart', (e) => {
-      if (!this.active) return;
-      for (const touch of e.changedTouches) {
-        if (touch.clientX > window.innerWidth * 0.35 && this.cameraTouchId === null) {
-          this.cameraTouchId = touch.identifier;
-          this.cameraLastX = touch.clientX;
-          this.cameraLastY = touch.clientY;
-        }
-      }
-    }, { passive: true });
-
-    // Touch move
-    document.addEventListener('touchmove', (e) => {
-      if (!this.active) return;
-      for (const touch of e.changedTouches) {
-        if (touch.identifier === this.joystickTouchId) {
-          e.preventDefault();
-          this.updateJoystick(touch.clientX, touch.clientY);
-        }
-        if (touch.identifier === this.cameraTouchId) {
-          const dx = touch.clientX - this.cameraLastX;
-          const dy = touch.clientY - this.cameraLastY;
-          this.cameraLastX = touch.clientX;
-          this.cameraLastY = touch.clientY;
-
-          // Accumulate camera drag delta for smoothing
-          this.cameraDragDeltaX += dx * 0.004;
-          this.cameraDragDeltaY += dy * 0.002;
-        }
-      }
-    }, { passive: false });
-
-    // Touch end
-    document.addEventListener('touchend', (e) => {
-      for (const touch of e.changedTouches) {
-        if (touch.identifier === this.joystickTouchId) {
-          this.joystickTouchId = null;
-          this.joystickActive = false;
-          this.joystickX = 0;
-          this.joystickY = 0;
-          this.joystickThumb.style.transform = 'translate(0px, 0px)';
-          this.joystickBase.classList.remove('active');
-          this.joystickThumb.classList.remove('active');
-          // Reset base position
-          this.joystickBase.style.left = '10px';
-          this.joystickBase.style.bottom = '10px';
-          this.joystickBase.style.top = 'auto';
-        }
-        if (touch.identifier === this.cameraTouchId) {
-          this.cameraTouchId = null;
-        }
+  setupKeyboard() {
+    window.addEventListener('keydown', (e) => {
+      this.keys[e.code] = true;
+      if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'ArrowDown' ||
+          e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+        e.preventDefault();
       }
     });
-
-    document.addEventListener('touchcancel', (e) => {
-      for (const touch of e.changedTouches) {
-        if (touch.identifier === this.joystickTouchId) {
-          this.joystickTouchId = null;
-          this.joystickActive = false;
-          this.joystickThumb.style.transform = 'translate(0px, 0px)';
-          this.joystickBase.classList.remove('active');
-          this.joystickThumb.classList.remove('active');
-          this.joystickBase.style.left = '10px';
-          this.joystickBase.style.bottom = '10px';
-          this.joystickBase.style.top = 'auto';
-          this.player.moveInput.x = 0;
-          this.player.moveInput.z = 0;
-        }
-        if (touch.identifier === this.cameraTouchId) {
-          this.cameraTouchId = null;
-        }
-      }
-    });
-
-    // Jump button - immediate with visual feedback
-    this.jumpBtn.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      this.jumpBtn.classList.add('pressed');
-      if (this.onJump) this.onJump();
-    }, { passive: false });
-    this.jumpBtn.addEventListener('touchend', () => {
-      this.jumpBtn.classList.remove('pressed');
-    });
-
-    // Ability button
-    this.abilityBtn.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      this.abilityBtn.classList.add('pressed');
-      if (this.onAbility) this.onAbility();
-    }, { passive: false });
-    this.abilityBtn.addEventListener('touchend', () => {
-      this.abilityBtn.classList.remove('pressed');
+    window.addEventListener('keyup', (e) => {
+      this.keys[e.code] = false;
     });
   }
 
-  updateJoystick(touchX, touchY) {
-    const maxRadius = 50; // Larger radius for more control
-    let dx = touchX - this.joystickStartX;
-    let dy = touchY - this.joystickStartY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+  setupTouchUI() {
+    // Show touch controls
+    const dpad = document.getElementById('dpad');
+    const actions = document.getElementById('action-buttons');
+    if (dpad) dpad.style.display = 'flex';
+    if (actions) actions.style.display = 'flex';
 
-    if (dist > maxRadius) {
-      dx = (dx / dist) * maxRadius;
-      dy = (dy / dist) * maxRadius;
+    // D-pad buttons
+    const dirs = [
+      { id: 'dpad-up', dir: DIRECTIONS.UP, mx: 0, my: -1 },
+      { id: 'dpad-down', dir: DIRECTIONS.DOWN, mx: 0, my: 1 },
+      { id: 'dpad-left', dir: DIRECTIONS.LEFT, mx: -1, my: 0 },
+      { id: 'dpad-right', dir: DIRECTIONS.RIGHT, mx: 1, my: 0 },
+    ];
+
+    for (const d of dirs) {
+      const el = document.getElementById(d.id);
+      if (!el) continue;
+      el.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        this.dpadDir = d;
+        this.dpadActive = true;
+        el.classList.add('active');
+      });
+      el.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        el.classList.remove('active');
+        if (this.dpadDir === d) {
+          this.dpadDir = null;
+          this.dpadActive = false;
+        }
+      });
+      el.addEventListener('touchcancel', () => {
+        el.classList.remove('active');
+        if (this.dpadDir === d) {
+          this.dpadDir = null;
+          this.dpadActive = false;
+        }
+      });
     }
 
-    this.joystickThumb.style.transform = `translate(${dx}px, ${dy}px)`;
+    // Action buttons
+    const btnInteract = document.getElementById('btn-interact');
+    const btnJump = document.getElementById('btn-jump');
 
-    this.joystickX = dx / maxRadius;
-    this.joystickY = dy / maxRadius;
-
-    // Dead zone
-    if (Math.abs(this.joystickX) < 0.12) this.joystickX = 0;
-    if (Math.abs(this.joystickY) < 0.12) this.joystickY = 0;
-  }
-
-  // Called each frame to apply smoothed input and camera damping
-  updateSmoothing(dt) {
-    // Smooth movement input
-    const targetX = this.joystickX;
-    const targetZ = -this.joystickY;
-    const smoothing = 0.15;
-    this.smoothMoveX += (targetX - this.smoothMoveX) * smoothing;
-    this.smoothMoveZ += (targetZ - this.smoothMoveZ) * smoothing;
-
-    // Apply dead zone after smoothing
-    this.player.moveInput.x = Math.abs(this.smoothMoveX) > 0.05 ? this.smoothMoveX : 0;
-    this.player.moveInput.z = Math.abs(this.smoothMoveZ) > 0.05 ? this.smoothMoveZ : 0;
-
-    // Apply camera smoothing
-    const cameraDamping = 0.12;
-    this.player.cameraAngleX += this.cameraDragDeltaX * cameraDamping;
-    this.player.cameraAngleY = clamp(
-      this.player.cameraAngleY + this.cameraDragDeltaY * cameraDamping,
-      -0.15, 0.7 // Limited range for tablet comfort
-    );
-    this.cameraDragDeltaX *= (1 - cameraDamping);
-    this.cameraDragDeltaY *= (1 - cameraDamping);
-    if (Math.abs(this.cameraDragDeltaX) < 0.0001) this.cameraDragDeltaX = 0;
-    if (Math.abs(this.cameraDragDeltaY) < 0.0001) this.cameraDragDeltaY = 0;
-  }
-
-  setupKeyboardListeners() {
-    const keys = {};
-    document.addEventListener('keydown', (e) => {
-      if (!this.active) return;
-      keys[e.code] = true;
-      this.updateKeyboardInput(keys);
-      if (e.code === 'Space') {
+    if (btnInteract) {
+      btnInteract.addEventListener('touchstart', (e) => {
         e.preventDefault();
-        if (this.onJump) this.onJump();
-      }
-      if (e.code === 'KeyE') {
-        if (this.onAbility) this.onAbility();
-      }
-    });
-    document.addEventListener('keyup', (e) => {
-      keys[e.code] = false;
-      this.updateKeyboardInput(keys);
-    });
+        this.touchInteract = true;
+        btnInteract.classList.add('active');
+      });
+      btnInteract.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        this.touchInteract = false;
+        btnInteract.classList.remove('active');
+      });
+    }
 
-    // Mouse look
-    let mouseDown = false;
-    const canvas = document.getElementById('game-canvas');
-    canvas.addEventListener('mousedown', (e) => {
-      if (!this.active) return;
-      mouseDown = true;
-      this.cameraLastX = e.clientX;
-      this.cameraLastY = e.clientY;
-    });
-    document.addEventListener('mousemove', (e) => {
-      if (!this.active || !mouseDown) return;
-      const dx = e.clientX - this.cameraLastX;
-      const dy = e.clientY - this.cameraLastY;
-      this.cameraLastX = e.clientX;
-      this.cameraLastY = e.clientY;
-      this.player.cameraAngleX += dx * 0.005;
-      this.player.cameraAngleY = clamp(this.player.cameraAngleY + dy * 0.003, -0.15, 0.7);
-    });
-    document.addEventListener('mouseup', () => { mouseDown = false; });
+    if (btnJump) {
+      btnJump.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        this.touchJump = true;
+        btnJump.classList.add('active');
+      });
+      btnJump.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        this.touchJump = false;
+        btnJump.classList.remove('active');
+      });
+    }
   }
 
-  updateKeyboardInput(keys) {
-    let x = 0, z = 0;
-    if (keys['KeyW'] || keys['ArrowUp']) z = 1;
-    if (keys['KeyS'] || keys['ArrowDown']) z = -1;
-    if (keys['KeyA'] || keys['ArrowLeft']) x = -1;
-    if (keys['KeyD'] || keys['ArrowRight']) x = 1;
-    this.player.moveInput.x = x;
-    this.player.moveInput.z = z;
+  update() {
+    let mx = 0, my = 0;
+
+    // Keyboard input
+    if (this.keys['KeyW'] || this.keys['ArrowUp']) my -= 1;
+    if (this.keys['KeyS'] || this.keys['ArrowDown']) my += 1;
+    if (this.keys['KeyA'] || this.keys['ArrowLeft']) mx -= 1;
+    if (this.keys['KeyD'] || this.keys['ArrowRight']) mx += 1;
+
+    // D-pad input
+    if (this.dpadDir) {
+      mx = this.dpadDir.mx;
+      my = this.dpadDir.my;
+    }
+
+    this.moveX = mx;
+    this.moveY = my;
+
+    // Direction
+    if (mx !== 0 || my !== 0) {
+      if (Math.abs(my) >= Math.abs(mx)) {
+        this.direction = my > 0 ? DIRECTIONS.DOWN : DIRECTIONS.UP;
+      } else {
+        this.direction = mx > 0 ? DIRECTIONS.RIGHT : DIRECTIONS.LEFT;
+      }
+    }
+
+    // Interact
+    const interact = this.keys['KeyE'] || this.keys['Enter'] || this.touchInteract;
+    this.interactJustPressed = interact && !this._prevInteract;
+    this.interact = interact;
+    this._prevInteract = interact;
+
+    // Jump
+    const jump = this.keys['Space'] || this.touchJump;
+    this.jumpJustPressed = jump && !this._prevJump;
+    this.jump = jump;
+    this._prevJump = jump;
+  }
+
+  isMoving() {
+    return this.moveX !== 0 || this.moveY !== 0;
+  }
+
+  destroy() {
+    // Cleanup if needed
   }
 }

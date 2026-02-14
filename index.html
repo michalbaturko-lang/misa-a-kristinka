@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Míša & Kristinka - Dobrodruzi</title>
+  <link rel="stylesheet" href="/styles/game.css">
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="screen active">
+      <div class="title-container">
+        <h1 class="game-title">Míša & Kristinka</h1>
+        <h2 class="game-subtitle">Dobrodruzi</h2>
+      </div>
+      <div class="character-select">
+        <h3>Vyber si svou postavu:</h3>
+        <div class="character-cards">
+          <div class="character-card" data-role="mathematician">
+            <div class="character-avatar mathematician-avatar"></div>
+            <h4>Míša</h4>
+            <p class="character-desc">Čaroděj čísel</p>
+            <p class="character-power">Řeší matematické hádanky a odemyká tajemství čísel</p>
+          </div>
+          <div class="character-card" data-role="artist">
+            <div class="character-avatar artist-avatar"></div>
+            <h4>Kristinka</h4>
+            <p class="character-desc">Umělkyně</p>
+            <p class="character-power">Maluje, tvoří vzory a oživuje svět barvami</p>
+          </div>
+        </div>
+      </div>
+      <div id="waiting-message" class="hidden">
+        <div class="waiting-spinner"></div>
+        <p>Čekám na kamaráda...</p>
+        <p class="room-code">Kód místnosti: <span id="room-code-display"></span></p>
+      </div>
+      <div id="room-setup" class="hidden">
+        <button id="create-room-btn" class="btn btn-primary">Vytvořit novou hru</button>
+        <div class="room-divider">nebo</div>
+        <div class="join-room">
+          <input type="text" id="room-code-input" placeholder="Zadej kód místnosti" maxlength="6">
+          <button id="join-room-btn" class="btn btn-secondary">Připojit se</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" class="screen hidden">
+      <div id="hud-top">
+        <div id="player-info">
+          <div id="player-role-icon"></div>
+          <span id="player-name"></span>
+        </div>
+        <div id="stars-counter">
+          <span class="star-icon">★</span>
+          <span id="stars-count">0</span>
+        </div>
+      </div>
+      <div id="partner-indicator" class="hidden">
+        <div class="partner-arrow"></div>
+        <span id="partner-name"></span>
+      </div>
+      <div id="quest-notification" class="hidden">
+        <p id="quest-text"></p>
+      </div>
+      <div id="interaction-prompt" class="hidden">
+        <button id="interact-btn" class="btn btn-interact">✋ Interakce</button>
+      </div>
+    </div>
+
+    <!-- Math Puzzle UI -->
+    <div id="math-puzzle-screen" class="screen hidden">
+      <div class="puzzle-container">
+        <h3 id="math-puzzle-title">Matematická hádanka</h3>
+        <div id="math-puzzle-question"></div>
+        <div id="math-puzzle-input">
+          <div id="math-answer-display">?</div>
+          <div class="numpad">
+            <button class="numpad-btn" data-num="1">1</button>
+            <button class="numpad-btn" data-num="2">2</button>
+            <button class="numpad-btn" data-num="3">3</button>
+            <button class="numpad-btn" data-num="4">4</button>
+            <button class="numpad-btn" data-num="5">5</button>
+            <button class="numpad-btn" data-num="6">6</button>
+            <button class="numpad-btn" data-num="7">7</button>
+            <button class="numpad-btn" data-num="8">8</button>
+            <button class="numpad-btn" data-num="9">9</button>
+            <button class="numpad-btn numpad-clear" data-num="clear">✕</button>
+            <button class="numpad-btn" data-num="0">0</button>
+            <button class="numpad-btn numpad-submit" data-num="submit">✓</button>
+          </div>
+        </div>
+        <div id="math-puzzle-feedback" class="hidden"></div>
+        <button id="math-puzzle-close" class="btn btn-close">Zavřít</button>
+      </div>
+    </div>
+
+    <!-- Creative Puzzle UI -->
+    <div id="creative-puzzle-screen" class="screen hidden">
+      <div class="puzzle-container">
+        <h3 id="creative-puzzle-title">Tvůrčí úkol</h3>
+        <div id="creative-puzzle-instruction"></div>
+        <div id="creative-puzzle-area">
+          <canvas id="creative-canvas" width="300" height="300"></canvas>
+          <div id="color-palette">
+            <div class="color-swatch" data-color="#e74c3c" style="background:#e74c3c"></div>
+            <div class="color-swatch" data-color="#e67e22" style="background:#e67e22"></div>
+            <div class="color-swatch" data-color="#f1c40f" style="background:#f1c40f"></div>
+            <div class="color-swatch" data-color="#2ecc71" style="background:#2ecc71"></div>
+            <div class="color-swatch" data-color="#3498db" style="background:#3498db"></div>
+            <div class="color-swatch" data-color="#9b59b6" style="background:#9b59b6"></div>
+            <div class="color-swatch" data-color="#e91e8f" style="background:#e91e8f"></div>
+            <div class="color-swatch" data-color="#ffffff" style="background:#ffffff"></div>
+          </div>
+          <div id="pattern-grid" class="hidden"></div>
+        </div>
+        <div id="creative-puzzle-feedback" class="hidden"></div>
+        <button id="creative-submit" class="btn btn-primary">Hotovo!</button>
+        <button id="creative-puzzle-close" class="btn btn-close">Zavřít</button>
+      </div>
+    </div>
+
+    <!-- Dialog Box -->
+    <div id="dialog-box" class="hidden">
+      <div class="dialog-content">
+        <div id="dialog-speaker"></div>
+        <p id="dialog-text"></p>
+        <button id="dialog-next" class="btn btn-small">Další →</button>
+      </div>
+    </div>
+
+    <!-- Celebration overlay -->
+    <div id="celebration-overlay" class="hidden">
+      <div class="celebration-content">
+        <h2 id="celebration-title"></h2>
+        <div class="celebration-stars">★ ★ ★</div>
+        <p id="celebration-text"></p>
+      </div>
+    </div>
+
+    <!-- Touch Controls -->
+    <div id="touch-controls" class="hidden">
+      <div id="joystick-zone">
+        <div id="joystick-base">
+          <div id="joystick-thumb"></div>
+        </div>
+      </div>
+      <div id="action-buttons">
+        <button id="jump-btn" class="action-btn">↑</button>
+        <button id="ability-btn" class="action-btn ability">★</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

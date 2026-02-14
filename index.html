@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
-  <title>Míša & Kristinka - Dobrodruzi</title>
+  <title>Misa & Kristinka - Dobrodruzi</title>
   <link rel="stylesheet" href="/styles/game.css">
 </head>
 <body>
@@ -15,38 +15,45 @@
 
     <!-- Start Screen -->
     <div id="start-screen" class="screen active">
-      <div class="title-container">
-        <h1 class="game-title">Míša & Kristinka</h1>
-        <h2 class="game-subtitle">Dobrodruzi</h2>
-      </div>
-      <div class="character-select">
-        <h3>Vyber si svou postavu:</h3>
-        <div class="character-cards">
-          <div class="character-card" data-role="mathematician">
-            <div class="character-avatar mathematician-avatar"></div>
-            <h4>Míša</h4>
-            <p class="character-desc">Čaroděj čísel</p>
-            <p class="character-power">Řeší matematické hádanky a odemyká tajemství čísel</p>
-          </div>
-          <div class="character-card" data-role="artist">
-            <div class="character-avatar artist-avatar"></div>
-            <h4>Kristinka</h4>
-            <p class="character-desc">Umělkyně</p>
-            <p class="character-power">Maluje, tvoří vzory a oživuje svět barvami</p>
+      <canvas id="start-bg-canvas" class="start-bg-canvas"></canvas>
+      <div class="start-content">
+        <div class="title-container">
+          <h1 class="game-title">Misa & Kristinka</h1>
+          <h2 class="game-subtitle">Dobrodruzi</h2>
+        </div>
+        <div class="character-select">
+          <h3>Vyber si svou postavu:</h3>
+          <div class="character-cards">
+            <div class="character-card" data-role="mathematician">
+              <div class="character-avatar">
+                <canvas id="misa-avatar-canvas" width="80" height="80"></canvas>
+              </div>
+              <h4>Misa</h4>
+              <p class="character-desc">Carodej cisel</p>
+              <p class="character-power">Resi matematicke hadanky a odemyka tajemstvi cisel</p>
+            </div>
+            <div class="character-card" data-role="artist">
+              <div class="character-avatar">
+                <canvas id="kristinka-avatar-canvas" width="80" height="80"></canvas>
+              </div>
+              <h4>Kristinka</h4>
+              <p class="character-desc">Umelkyne</p>
+              <p class="character-power">Maluje, tvori vzory a ozivuje svet barvami</p>
+            </div>
           </div>
         </div>
-      </div>
-      <div id="waiting-message" class="hidden">
-        <div class="waiting-spinner"></div>
-        <p>Čekám na kamaráda...</p>
-        <p class="room-code">Kód místnosti: <span id="room-code-display"></span></p>
-      </div>
-      <div id="room-setup" class="hidden">
-        <button id="create-room-btn" class="btn btn-primary">Vytvořit novou hru</button>
-        <div class="room-divider">nebo</div>
-        <div class="join-room">
-          <input type="text" id="room-code-input" placeholder="Zadej kód místnosti" maxlength="6">
-          <button id="join-room-btn" class="btn btn-secondary">Připojit se</button>
+        <div id="waiting-message" class="hidden">
+          <div class="waiting-spinner"></div>
+          <p>Cekam na kamarada...</p>
+          <p class="room-code">Kod mistnosti: <span id="room-code-display"></span></p>
+        </div>
+        <div id="room-setup" class="hidden">
+          <button id="create-room-btn" class="btn btn-primary">Vytvorit novou hru</button>
+          <div class="room-divider">nebo</div>
+          <div class="join-room">
+            <input type="text" id="room-code-input" placeholder="Zadej kod mistnosti" maxlength="6">
+            <button id="join-room-btn" class="btn btn-secondary">Pripojit se</button>
+          </div>
         </div>
       </div>
     </div>
@@ -59,7 +66,7 @@
           <span id="player-name"></span>
         </div>
         <div id="stars-counter">
-          <span class="star-icon">★</span>
+          <span class="star-icon"></span>
           <span id="stars-count">0</span>
         </div>
       </div>
@@ -71,14 +78,14 @@
         <p id="quest-text"></p>
       </div>
       <div id="interaction-prompt" class="hidden">
-        <button id="interact-btn" class="btn btn-interact">✋ Interakce</button>
+        <button id="interact-btn" class="btn btn-interact">Interakce</button>
       </div>
     </div>
 
     <!-- Math Puzzle UI -->
     <div id="math-puzzle-screen" class="screen hidden">
       <div class="puzzle-container">
-        <h3 id="math-puzzle-title">Matematická hádanka</h3>
+        <h3 id="math-puzzle-title">Matematicka hadanka</h3>
         <div id="math-puzzle-question"></div>
         <div id="math-puzzle-input">
           <div id="math-answer-display">?</div>
@@ -92,20 +99,20 @@
             <button class="numpad-btn" data-num="7">7</button>
             <button class="numpad-btn" data-num="8">8</button>
             <button class="numpad-btn" data-num="9">9</button>
-            <button class="numpad-btn numpad-clear" data-num="clear">✕</button>
+            <button class="numpad-btn numpad-clear" data-num="clear">X</button>
             <button class="numpad-btn" data-num="0">0</button>
-            <button class="numpad-btn numpad-submit" data-num="submit">✓</button>
+            <button class="numpad-btn numpad-submit" data-num="submit">OK</button>
           </div>
         </div>
         <div id="math-puzzle-feedback" class="hidden"></div>
-        <button id="math-puzzle-close" class="btn btn-close">Zavřít</button>
+        <button id="math-puzzle-close" class="btn btn-close">Zavrit</button>
       </div>
     </div>
 
     <!-- Creative Puzzle UI -->
     <div id="creative-puzzle-screen" class="screen hidden">
       <div class="puzzle-container">
-        <h3 id="creative-puzzle-title">Tvůrčí úkol</h3>
+        <h3 id="creative-puzzle-title">Tvurci ukol</h3>
         <div id="creative-puzzle-instruction"></div>
         <div id="creative-puzzle-area">
           <canvas id="creative-canvas" width="300" height="300"></canvas>
@@ -123,7 +130,7 @@
         </div>
         <div id="creative-puzzle-feedback" class="hidden"></div>
         <button id="creative-submit" class="btn btn-primary">Hotovo!</button>
-        <button id="creative-puzzle-close" class="btn btn-close">Zavřít</button>
+        <button id="creative-puzzle-close" class="btn btn-close">Zavrit</button>
       </div>
     </div>
 
@@ -132,7 +139,7 @@
       <div class="dialog-content">
         <div id="dialog-speaker"></div>
         <p id="dialog-text"></p>
-        <button id="dialog-next" class="btn btn-small">Další →</button>
+        <button id="dialog-next" class="btn btn-small">Dalsi</button>
       </div>
     </div>
 
@@ -140,7 +147,7 @@
     <div id="celebration-overlay" class="hidden">
       <div class="celebration-content">
         <h2 id="celebration-title"></h2>
-        <div class="celebration-stars">★ ★ ★</div>
+        <div class="celebration-stars">*  *  *</div>
         <p id="celebration-text"></p>
       </div>
     </div>
@@ -153,8 +160,8 @@
         </div>
       </div>
       <div id="action-buttons">
-        <button id="jump-btn" class="action-btn">↑</button>
-        <button id="ability-btn" class="action-btn ability">★</button>
+        <button id="jump-btn" class="action-btn jump-btn">^</button>
+        <button id="ability-btn" class="action-btn ability">*</button>
       </div>
     </div>
   </div>

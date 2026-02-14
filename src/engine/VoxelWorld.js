@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { BLOCKS, BLOCK_COLORS, TRANSPARENT_BLOCKS } from '../utils/constants.js';
+import { TextureGenerator } from './TextureGenerator.js';
 
 /**
  * VoxelWorld - manages voxel data and mesh generation
- * Optimized for tablet performance using merged geometry
+ * With procedural texture atlas and per-vertex ambient occlusion
  */
 export class VoxelWorld {
   constructor(sizeX = 64, sizeY = 40, sizeZ = 64) {
@@ -13,11 +14,12 @@ export class VoxelWorld {
     this.data = new Uint8Array(sizeX * sizeY * sizeZ);
     this.mesh = null;
     this.waterMesh = null;
-    this.interactables = new Map(); // position key -> interactable data
+    this.interactables = new Map();
     this.particles = [];
+    this.textureGen = new TextureGenerator();
+    this.portalMeshes = [];
   }
 
-  // Get voxel at position
   getBlock(x, y, z) {
     if (x < 0 || x >= this.sizeX || y < 0 || y >= this.sizeY || z < 0 || z >= this.sizeZ) {
       return BLOCKS.AIR;
@@ -25,19 +27,16 @@ export class VoxelWorld {
     return this.data[x + y * this.sizeX + z * this.sizeX * this.sizeY];
   }
 
-  // Set voxel at position
   setBlock(x, y, z, type) {
     if (x < 0 || x >= this.sizeX || y < 0 || y >= this.sizeY || z < 0 || z >= this.sizeZ) return;
     this.data[x + y * this.sizeX + z * this.sizeX * this.sizeY] = type;
   }
 
-  // Add an interactable object at position
   addInteractable(x, y, z, data) {
     const key = `${x},${y},${z}`;
     this.interactables.set(key, { x, y, z, ...data });
   }
 
-  // Get interactable near position
   getInteractableNear(px, py, pz, radius = 3) {
     let closest = null;
     let closestDist = radius;
@@ -54,7 +53,6 @@ export class VoxelWorld {
     return closest;
   }
 
-  // Get height at x,z (topmost solid block)
   getHeight(x, z) {
     for (let y = this.sizeY - 1; y >= 0; y--) {
       const block = this.getBlock(x, y, z);
@@ -65,7 +63,6 @@ export class VoxelWorld {
     return 0;
   }
 
-  // Check if block at position is solid (for collision)
   isSolid(x, y, z) {
     const block = this.getBlock(Math.floor(x), Math.floor(y), Math.floor(z));
     return block !== BLOCKS.AIR && block !== BLOCKS.WATER &&
@@ -74,13 +71,12 @@ export class VoxelWorld {
            block !== BLOCKS.PORTAL;
   }
 
-  // Build optimized mesh from voxel data
   buildMesh(scene) {
     // Remove old meshes
     if (this.mesh) {
       scene.remove(this.mesh);
       this.mesh.geometry.dispose();
-      if (this.mesh.material.length) {
+      if (Array.isArray(this.mesh.material)) {
         this.mesh.material.forEach(m => m.dispose());
       } else {
         this.mesh.material.dispose();
@@ -91,27 +87,36 @@ export class VoxelWorld {
       this.waterMesh.geometry.dispose();
       this.waterMesh.material.dispose();
     }
+    for (const pm of this.portalMeshes) {
+      scene.remove(pm);
+      if (pm.geometry) pm.geometry.dispose();
+      if (pm.material) pm.material.dispose();
+    }
+    this.portalMeshes = [];
 
     const positions = [];
     const normals = [];
     const colors = [];
+    const uvs = [];
     const indices = [];
     const waterPositions = [];
     const waterNormals = [];
+    const waterUvs = [];
     const waterIndices = [];
 
     let vertexCount = 0;
     let waterVertexCount = 0;
 
-    // Face definitions: [dx, dy, dz, vertices, normal]
     const faces = [
-      { dir: [0, 1, 0], name: 'top', corners: [[0,1,0],[1,1,0],[1,1,1],[0,1,1]], normal: [0,1,0] },
-      { dir: [0, -1, 0], name: 'bottom', corners: [[0,0,1],[1,0,1],[1,0,0],[0,0,0]], normal: [0,-1,0] },
-      { dir: [1, 0, 0], name: 'side', corners: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], normal: [1,0,0] },
-      { dir: [-1, 0, 0], name: 'side', corners: [[0,0,1],[0,1,1],[0,1,0],[0,0,0]], normal: [-1,0,0] },
-      { dir: [0, 0, 1], name: 'side', corners: [[0,0,1],[0,1,1],[1,1,1],[1,0,1]], normal: [0,0,1] },  // Fixed winding
-      { dir: [0, 0, -1], name: 'side', corners: [[1,0,0],[1,1,0],[0,1,0],[0,0,0]], normal: [0,0,-1] }, // Fixed winding
+      { dir: [0, 1, 0], faceType: 0, corners: [[0,1,0],[1,1,0],[1,1,1],[0,1,1]], normal: [0,1,0] },
+      { dir: [0, -1, 0], faceType: 2, corners: [[0,0,1],[1,0,1],[1,0,0],[0,0,0]], normal: [0,-1,0] },
+      { dir: [1, 0, 0], faceType: 1, corners: [[1,0,0],[1,1,0],[1,1,1],[1,0,1]], normal: [1,0,0] },
+      { dir: [-1, 0, 0], faceType: 1, corners: [[0,0,1],[0,1,1],[0,1,0],[0,0,0]], normal: [-1,0,0] },
+      { dir: [0, 0, 1], faceType: 1, corners: [[0,0,1],[0,1,1],[1,1,1],[1,0,1]], normal: [0,0,1] },
+      { dir: [0, 0, -1], faceType: 1, corners: [[1,0,0],[1,1,0],[0,1,0],[0,0,0]], normal: [0,0,-1] },
     ];
+
+    const portalPositions = [];
 
     for (let y = 0; y < this.sizeY; y++) {
       for (let z = 0; z < this.sizeZ; z++) {
@@ -119,8 +124,11 @@ export class VoxelWorld {
           const block = this.getBlock(x, y, z);
           if (block === BLOCKS.AIR) continue;
 
+          if (block === BLOCKS.PORTAL) {
+            portalPositions.push({ x, y, z });
+          }
+
           const isWater = block === BLOCKS.WATER;
-          const isTransparent = TRANSPARENT_BLOCKS.has(block);
           const blockColor = BLOCK_COLORS[block];
           if (!blockColor) continue;
 
@@ -130,26 +138,51 @@ export class VoxelWorld {
             const nz = z + face.dir[2];
             const neighbor = this.getBlock(nx, ny, nz);
 
-            // Only render face if neighbor is air (or transparent and different)
             const shouldRender = isWater
               ? (neighbor === BLOCKS.AIR)
               : (TRANSPARENT_BLOCKS.has(neighbor) && neighbor !== block);
 
             if (!shouldRender) continue;
 
-            const colorKey = face.name === 'top' ? 'top' : face.name === 'bottom' ? 'bottom' : 'side';
-            const color = blockColor[colorKey] || blockColor.top;
-            const rgb = hexToRgbFast(color);
+            const uv = this.textureGen.getUV(block, face.faceType);
+            const uvCorners = [
+              [uv.u0, uv.v0],
+              [uv.u1, uv.v0],
+              [uv.u1, uv.v1],
+              [uv.u0, uv.v1],
+            ];
 
-            // Add ambient occlusion-like darkening for side/bottom faces
-            let r = rgb.r, g = rgb.g, b = rgb.b;
-            if (face.name === 'side') { r *= 0.85; g *= 0.85; b *= 0.85; }
-            if (face.name === 'bottom') { r *= 0.7; g *= 0.7; b *= 0.7; }
+            // Per-vertex AO
+            const aoValues = [];
+            for (let ci = 0; ci < 4; ci++) {
+              const c = face.corners[ci];
+              const cdx = c[0] === 0 ? -1 : 1;
+              const cdy = c[1] === 0 ? -1 : 1;
+              const cdz = c[2] === 0 ? -1 : 1;
+
+              const ox = x + face.dir[0];
+              const oy = y + face.dir[1];
+              const oz = z + face.dir[2];
+
+              const s1 = this.getBlock(ox + cdx, oy, oz) !== BLOCKS.AIR ? 1 : 0;
+              const s2 = this.getBlock(ox, oy + cdy, oz) !== BLOCKS.AIR ? 1 : 0;
+              const s3 = this.getBlock(ox, oy, oz + cdz) !== BLOCKS.AIR ? 1 : 0;
+              const cr = this.getBlock(ox + cdx, oy + cdy, oz + cdz) !== BLOCKS.AIR ? 1 : 0;
+
+              const ao = s1 + s2 + s3 + (s1 && s2 ? 1 : cr);
+              aoValues.push(Math.max(0.5, 1.0 - ao * 0.1));
+            }
+
+            let faceBrightness = 1.0;
+            if (face.faceType === 1) faceBrightness = 0.85;
+            if (face.faceType === 2) faceBrightness = 0.7;
 
             if (isWater) {
-              for (const corner of face.corners) {
-                waterPositions.push(x + corner[0], y + corner[1] * 0.85, z + corner[2]);
+              for (let ci = 0; ci < 4; ci++) {
+                const c = face.corners[ci];
+                waterPositions.push(x + c[0], y + c[1] * 0.85, z + c[2]);
                 waterNormals.push(...face.normal);
+                waterUvs.push(uvCorners[ci][0], uvCorners[ci][1]);
               }
               waterIndices.push(
                 waterVertexCount, waterVertexCount + 1, waterVertexCount + 2,
@@ -157,10 +190,13 @@ export class VoxelWorld {
               );
               waterVertexCount += 4;
             } else {
-              for (const corner of face.corners) {
-                positions.push(x + corner[0], y + corner[1], z + corner[2]);
+              for (let ci = 0; ci < 4; ci++) {
+                const c = face.corners[ci];
+                positions.push(x + c[0], y + c[1], z + c[2]);
                 normals.push(...face.normal);
-                colors.push(r, g, b);
+                uvs.push(uvCorners[ci][0], uvCorners[ci][1]);
+                const brightness = aoValues[ci] * faceBrightness;
+                colors.push(brightness, brightness, brightness);
               }
               indices.push(
                 vertexCount, vertexCount + 1, vertexCount + 2,
@@ -173,15 +209,17 @@ export class VoxelWorld {
       }
     }
 
-    // Create solid mesh
+    // Solid mesh with texture atlas
     if (positions.length > 0) {
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
       geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
       geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
       geometry.setIndex(indices);
 
       const material = new THREE.MeshLambertMaterial({
+        map: this.textureGen.texture,
         vertexColors: true,
         side: THREE.FrontSide,
       });
@@ -192,32 +230,133 @@ export class VoxelWorld {
       scene.add(this.mesh);
     }
 
-    // Create water mesh
+    // Water mesh
     if (waterPositions.length > 0) {
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.Float32BufferAttribute(waterPositions, 3));
       geometry.setAttribute('normal', new THREE.Float32BufferAttribute(waterNormals, 3));
+      geometry.setAttribute('uv', new THREE.Float32BufferAttribute(waterUvs, 2));
       geometry.setIndex(waterIndices);
 
       const material = new THREE.MeshLambertMaterial({
-        color: 0x2196F3,
+        map: this.textureGen.texture,
         transparent: true,
-        opacity: 0.6,
+        opacity: 0.55,
         side: THREE.DoubleSide,
       });
 
       this.waterMesh = new THREE.Mesh(geometry, material);
       scene.add(this.waterMesh);
     }
+
+    // Portal glow effects
+    this.createPortalGlows(scene, portalPositions);
   }
 
-  // Clear all data
+  createPortalGlows(scene, portalPositions) {
+    if (portalPositions.length === 0) return;
+
+    // Cluster nearby portal blocks
+    const visited = new Set();
+    const clusters = [];
+
+    for (const pos of portalPositions) {
+      const key = `${pos.x},${pos.y},${pos.z}`;
+      if (visited.has(key)) continue;
+
+      const cluster = [];
+      const stack = [pos];
+      while (stack.length > 0) {
+        const p = stack.pop();
+        const k = `${p.x},${p.y},${p.z}`;
+        if (visited.has(k)) continue;
+        visited.add(k);
+        cluster.push(p);
+
+        for (const pp of portalPositions) {
+          const dk = `${pp.x},${pp.y},${pp.z}`;
+          if (!visited.has(dk) && Math.abs(pp.x - p.x) + Math.abs(pp.y - p.y) + Math.abs(pp.z - p.z) <= 2) {
+            stack.push(pp);
+          }
+        }
+      }
+      if (cluster.length > 0) clusters.push(cluster);
+    }
+
+    for (const cluster of clusters) {
+      let cx = 0, cy = 0, cz = 0;
+      for (const p of cluster) {
+        cx += p.x + 0.5;
+        cy += p.y + 0.5;
+        cz += p.z + 0.5;
+      }
+      cx /= cluster.length;
+      cy /= cluster.length;
+      cz /= cluster.length;
+
+      // Outer glow sphere
+      const glowGeo = new THREE.SphereGeometry(1.8, 16, 16);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: 0xb060ff,
+        transparent: true,
+        opacity: 0.25,
+        side: THREE.DoubleSide,
+      });
+      const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+      glowMesh.position.set(cx, cy, cz);
+      glowMesh.userData.isPortalGlow = true;
+      glowMesh.userData.baseOpacity = 0.25;
+      scene.add(glowMesh);
+      this.portalMeshes.push(glowMesh);
+
+      // Inner bright orb
+      const innerGeo = new THREE.SphereGeometry(0.8, 12, 12);
+      const innerMat = new THREE.MeshBasicMaterial({
+        color: 0xd0a0ff,
+        transparent: true,
+        opacity: 0.5,
+      });
+      const innerMesh = new THREE.Mesh(innerGeo, innerMat);
+      innerMesh.position.set(cx, cy, cz);
+      innerMesh.userData.isPortalGlow = true;
+      innerMesh.userData.baseOpacity = 0.5;
+      innerMesh.userData.isInner = true;
+      scene.add(innerMesh);
+      this.portalMeshes.push(innerMesh);
+
+      // Portal point light
+      const light = new THREE.PointLight(0xb060ff, 2, 10);
+      light.position.set(cx, cy, cz);
+      scene.add(light);
+      this.portalMeshes.push(light);
+    }
+  }
+
+  animatePortals(time) {
+    for (const mesh of this.portalMeshes) {
+      if (mesh.isPointLight) {
+        mesh.intensity = 1.5 + Math.sin(time * 0.003) * 0.8;
+      } else if (mesh.userData.isPortalGlow) {
+        const t = time * 0.001;
+        const pulse = Math.sin(t * 2) * 0.15;
+        mesh.material.opacity = mesh.userData.baseOpacity + pulse;
+        if (mesh.userData.isInner) {
+          mesh.rotation.y = t * 1.5;
+          mesh.rotation.z = Math.sin(t) * 0.3;
+          mesh.scale.setScalar(1 + Math.sin(t * 3) * 0.1);
+        } else {
+          mesh.rotation.y = t;
+          mesh.scale.setScalar(1 + Math.sin(t * 2) * 0.15);
+        }
+      }
+    }
+  }
+
   clear() {
     this.data.fill(BLOCKS.AIR);
     this.interactables.clear();
   }
 
-  // Fill a rectangular region
   fillBox(x1, y1, z1, x2, y2, z2, blockType) {
     for (let y = y1; y <= y2; y++) {
       for (let z = z1; z <= z2; z++) {
@@ -228,13 +367,10 @@ export class VoxelWorld {
     }
   }
 
-  // Build a tree at position
   buildTree(x, y, z, height = 5, leafRadius = 2) {
-    // Trunk
     for (let i = 0; i < height; i++) {
       this.setBlock(x, y + i, z, BLOCKS.WOOD);
     }
-    // Leaves (sphere-ish)
     const leafY = y + height - 1;
     for (let dy = -1; dy <= leafRadius; dy++) {
       const r = dy === leafRadius ? 1 : leafRadius;
@@ -251,11 +387,8 @@ export class VoxelWorld {
     }
   }
 
-  // Build a simple house
   buildHouse(x, y, z, width = 5, depth = 5, height = 4, wallBlock = BLOCKS.PLANKS, roofBlock = BLOCKS.BRICK) {
-    // Floor
     this.fillBox(x, y, z, x + width - 1, y, z + depth - 1, wallBlock);
-    // Walls
     for (let h = 1; h < height; h++) {
       for (let i = 0; i < width; i++) {
         this.setBlock(x + i, y + h, z, wallBlock);
@@ -266,16 +399,13 @@ export class VoxelWorld {
         this.setBlock(x + width - 1, y + h, z + i, wallBlock);
       }
     }
-    // Door (remove blocks)
     const doorX = x + Math.floor(width / 2);
     this.setBlock(doorX, y + 1, z, BLOCKS.AIR);
     this.setBlock(doorX, y + 2, z, BLOCKS.AIR);
-    // Window
     if (width >= 5) {
       this.setBlock(x + 1, y + 2, z, BLOCKS.GLASS);
       this.setBlock(x + width - 2, y + 2, z, BLOCKS.GLASS);
     }
-    // Roof
     for (let i = 0; i < width + 2; i++) {
       for (let j = 0; j < depth + 2; j++) {
         this.setBlock(x - 1 + i, y + height, z - 1 + j, roofBlock);
@@ -283,9 +413,7 @@ export class VoxelWorld {
     }
   }
 
-  // Build a portal (vertical ring)
   buildPortal(x, y, z, color = BLOCKS.PORTAL) {
-    // 5x5 portal frame
     const frame = [
       [0,0],[1,0],[2,0],[3,0],[4,0],
       [0,1],[4,1],
@@ -305,16 +433,4 @@ export class VoxelWorld {
       this.setBlock(x + dx, y + dy, z, color);
     }
   }
-}
-
-// Fast hex to RGB (0-1 range)
-function hexToRgbFast(hex) {
-  // Handle transparent colors
-  if (hex.length > 7) hex = hex.slice(0, 7);
-  const num = parseInt(hex.slice(1), 16);
-  return {
-    r: ((num >> 16) & 255) / 255,
-    g: ((num >> 8) & 255) / 255,
-    b: (num & 255) / 255,
-  };
 }
